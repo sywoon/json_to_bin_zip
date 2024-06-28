@@ -56,7 +56,7 @@ class DbWriter {
     //    table1:
     //      double_keys num: uint16
     //         [<utf8string, uint16>, ...]  映射对
-    //      values_num: uint16  根据heads_type读取内容 0:int16 1:string 2:json;  
+    //      values_num: uint16  根据heads_type读取内容 0:int 1:string 2:json 3:float 4:any
     //         [ [int16, string, ...], [...], ...]  json采用字符串方式存储和解析
 
     jsonToBin() {
@@ -126,12 +126,17 @@ class DbWriter {
             byte.writeInt16(body.length)
             for (let j = 0; j < body.length; j++) {
                 for (let k = 0; k < body[j].length; k++) {  //0:int 1:string 2:json;  
+                    let v = body[j][k]
                     if (head_type[k] == 0) {
-                        byte.writeVarInt(body[j][k])
+                        byte.writeVarInt(v)
                     } else if (head_type[k] == 1) {
-                        byte.writeUTFString(body[j][k])
+                        byte.writeUTFString(v)
                     } else if (head_type[k] == 2) {
-                        byte.writeUTFString(JSON.stringify(body[j][k]))
+                        byte.writeUTFString(JSON.stringify(v))
+                    } else if (head_type[k] == 3) {
+                        byte.writeFloat32(JSON.stringify(v))
+                    } else if (head_type[k] == 4) {
+                        byte.writeAny(JSON.stringify(v))
                     }
                 }
             }

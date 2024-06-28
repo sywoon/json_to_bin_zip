@@ -512,6 +512,48 @@ var Byte = exports.Byte = /** @class */ (function () {
         }
     }
 
+    // 优先json 再转Number-转int 
+    Byte.prototype.writeAny = function (value) {
+        if (typeof value == null) {
+            this.writeInt8(0);
+        } else if (typeof value === 'string') {
+            this.writeInt8(1);
+            this.writeUTFString(value)
+        } else if (typeof value === 'number') {
+            if (Number.isInteger(value)) {
+                this.writeInt8(2);
+                this.writeVarInt(value);
+            } else {
+                this.writeInt8(3);
+                this.writeFloat32(value)
+            }
+        } else if (typeof value === 'object') {
+            this.writeInt8(4);
+            this.writeUTFString(JSON.stringify(value));
+        } else {
+            console.error("writeAny Invalid type");
+        }
+    }
+
+    Byte.prototype.readAny = function () {
+        let flag = this.readInt8();
+        switch (flag) {
+            case 0:
+                return null;
+            case 1:
+                return this.readUTFString();
+            case 2:
+                return this.readVarInt();
+            case 3:
+                return this.readFloat32();
+            case 4:
+                return JSON.parse(this.readUTFString());
+            default:
+                console.error("Invalid flag");
+                return null;
+        }
+    }
+
 
     /**
      * @internal

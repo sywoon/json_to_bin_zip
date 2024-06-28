@@ -1,4 +1,6 @@
 const Byte = require ("./Byte").Byte
+const msgpack5 = require("msgpack5")
+const bl = require('bl')
 const log = console.log
 const DbReader = require("./DbReader")
 const DbWriter = require("./DbWriter")
@@ -36,8 +38,72 @@ function getByteLength(str) {
     }
 }
 
-function TestByte() {
+function toUInt8array(uInt8List){
+    var length = 0;
+    uInt8List.forEach(function(item, index, array){length += item.byteLength;});
+    var ul = new Uint8Array(length);
+    var offset = 0;
+    uInt8List.forEach(function(item, index, array)
+        {ul.set(item, offset); offset += item.byteLength;});
+    return ul;
+}
 
+function TestMsgPack() {
+    console.log("---TestMsgPack---begin---")
+    let mp = new msgpack5()
+    let u8arr = null
+    {
+        let buffs = [
+            mp.encode(3.14),
+            mp.encode(3.1415926),
+            mp.encode(99),
+            mp.encode(-88),
+            mp.encode(88),
+            mp.encode(7),
+            mp.encode(-6),
+            mp.encode(1704038400123),
+            mp.encode("hello世界"),
+            mp.encode(-128),
+
+            mp.encode(null),
+            mp.encode(-1.12),
+            mp.encode(-3),
+            mp.encode("你好nihao"),
+            mp.encode({a:1, b:2, c:3}),
+            mp.encode([11, 22, 33]),
+        ]
+        u8arr = toUInt8array(buffs)
+    }
+
+    console.log("---TestMsgPack---read---")
+
+    let buf = bl(u8arr)
+    let byte2 = new msgpack5()
+    console.log("all buffer", buf.length, buf)
+    {
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+        log(byte2.decode(buf))
+    }
+    console.log("---TestMsgPack---end---")
+}
+
+function TestByte() {
+    console.log("---TestByte---begin---")
     let byte = new Byte()
 
     {
@@ -53,10 +119,19 @@ function TestByte() {
         byte.writeUTFString("你好世界abc")
         byte.writeUTFString32("你好世界abc32")
         byte.writeByte(-128)
+
+        byte.writeAny(null)
+        byte.writeAny(-1.12)
+        byte.writeAny(-3)
+        byte.writeAny("你好nihao")
+        byte.writeAny({a:1, b:2, c:3})
+        byte.writeAny([11, 22, 33])
     }
 
+    console.log("---TestByte---read---")
+
     let byte2 = new Byte(byte.buffer)
-    console.log(byte2.length, byte2)
+    console.log("all buffer", byte2.length, byte2)
     {
         log(byte2.readFloat32())
         log(byte2.readFloat64())
@@ -70,16 +145,26 @@ function TestByte() {
         log(byte2.readUTFString())
         log(byte2.readUTFString32())
         log(byte2.readByte())
+
+        log(byte2.readAny())
+        log(byte2.readAny())
+        log(byte2.readAny())
+        log(byte2.readAny())
+        log(byte2.readAny())
+        log(byte2.readAny())
     }
+    console.log("---TestByte---end---")
 }
+
+TestMsgPack()
 TestByte()
 
 function main() {
     const dbWriter = new DbWriter();
-    dbWriter.jsonToBin();
+    // dbWriter.jsonToBin();
 
     const dbReader = new DbReader();
-    // dbReader.binToJson();
+    dbReader.binToJson();
 }
 
 main()
