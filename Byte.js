@@ -417,11 +417,61 @@ var Byte = exports.Byte = /** @class */ (function () {
 
     Byte.prototype.writeInt8 = function (value) {
         this._ensureWrite(this._pos_ + 1);
-        this._d_.setint8(this._pos_, value);
+        this._d_.setInt8(this._pos_, value);
         this._pos_++;
     }
 
+    // 写入大整数到文件 注意：小于int64 
+    // 安全整数范围是 -(2^53 - 1) 到 2^53 - 1，即 Number.MIN_SAFE_INTEGER 到 Number.MAX_SAFE_INTEGER
+    Byte.prototype.writeBigInt = function (value) {
+        if (value < Number.MIN_SAFE_INTEGER || value > Number.MAX_SAFE_INTEGER) {
+            // throw new RangeError("Value is out of bounds for big int");
+            console.error("Value is out of bounds for big int");
+            this.writeInt8(-1);
+            return
+        }
+
+        this._ensureWrite(this._pos_ + 8);
+        if (Byte._useBigInt && typeof BigInt !== 'undefined') {
+            this._d_.setBigInt64(this._pos_, BigInt(value), this._xd_); // true for little-endian
+            this._pos_ += 8;
+        } else {
+            // 方式1：有bug
+            // 限制在 0 到 31 之间，任何超过 31 的位移量都会被取模 32
+            // 所以：>>32 === >>0
+            //let lo = (value & 0xFFFFFFFF) >>> 0;
+            //let hi = ((value >> 32) & 0xFFFFFFFF) >>> 0;
+
+            // 方式2：正确
+            const lo = value >>> 0;  // 低 32 位
+            const hi = Math.floor(value / Math.pow(2, 32)) >>> 0;  // 高 32 位
+            this.writeUint32(lo);
+            this.writeUint32(hi);
+        }
+    }
+
+    Byte.prototype.readBigInt = function () {
+        if (this._pos_ + 8 > this._length) throw "readBigInt error - Out of bounds";
+
+        if (Byte._useBigInt && typeof BigInt !== 'undefined') {
+            let v = this._d_.getBigInt64(this._pos_, this._xd_); // true for little-endian
+            this._pos_ += 8;
+            return v;
+        } else {
+            let lo = this.readUint32();
+            let hi = this.readUint32();
+            return Number((hi * Math.pow(2, 32)) + lo);
+            // return Number((hi << 32) + lo);
+        }
+    }
+
+
+    // 若value在int8范围内 则使用writeint8
+    // 若value在int16范围内 则使用writeInt16
+    // 若value在int32范围内 则使用writeInt32
+    // 安全整数范围是 -(2^53 - 1) 到 2^53 - 1，即 Number.MIN_SAFE_INTEGER 到 Number.MAX_SAFE_INTEGER
     Byte.prototype.writeVarInt = function (value) {
+        let rtn = true;
         if (value >= -128 && value <= 127) {
             this.writeUint8(0);
             this.writeInt8(value);
@@ -431,9 +481,17 @@ var Byte = exports.Byte = /** @class */ (function () {
         } else if (value >= -2147483648 && value <= 2147483647) {
             this.writeUint8(2);
             this.writeInt32(value);
+        } else if (value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER) {
+            this.writeUint8(3);
+            this.writeBigInt(value);
         } else {
-            throw new RangeError("Value is out of bounds for int32");
+            // throw new RangeError("Value is out of bounds for int32:" + value);
+            console.error("Value is out of bounds for int32:" + value);
+            this.writeUint8(0);
+            this.writeInt8(-1);
+            rtn = false;
         }
+        return rtn;
     }
 
     Byte.prototype.readVarInt = function () {
@@ -445,8 +503,12 @@ var Byte = exports.Byte = /** @class */ (function () {
                 return this.readInt16();
             case 2:
                 return this.readInt32();
+            case 3:
+                return this.readBigInt();
             default:
-                throw new RangeError("Invalid flat value");
+                // throw new RangeError("Invalid flat value");
+                console.error("Invalid flat value");
+                return null;
         }
     }
 
@@ -829,5 +891,6 @@ var Byte = exports.Byte = /** @class */ (function () {
     Byte.LITTLE_ENDIAN = "littleEndian";
     /**@private */
     Byte._sysEndian = null;
+    Byte._useBigInt = false;
     return Byte;
 }());

@@ -68,8 +68,6 @@ class DbWriter {
         let tableIdx = 0
         for (let i = 0; i<heads["file_num"]; i++) {
             let bodys = this.readJson(`data${i+1}`);
-            console.log("body values", bodys.values.length)
-
             let byte = this.bodyToBin(tableIdx, i, heads, bodys, bodysInfo)
             bodyBytes.push(byte)
             tableIdx += bodys.values.length
@@ -101,7 +99,7 @@ class DbWriter {
         let byte = new Byte()
         let date = new Date()
         byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate())
-        byte.writeUint16(heads["tables"].length)
+        byte.writeVarInt(heads["tables"].length)
 
         for (let i = 0; i < bodys.values.length; i++) {
             let name = heads["tables"][i+tableIdx]
@@ -113,22 +111,23 @@ class DbWriter {
             //有多个data文件 按顺序叠加 
             bodysInfo.push({offset:byte.pos, bodyIdx:bodyIdx})  
             if (!heads["double_keys"][name]) {
-                byte.writeUint16(0) // double_keys num
+                byte.writeInt16(0) // double_keys num
             } else {
                 let double_keys = heads["double_keys"][name]
                 let len = Object.keys(double_keys).length
                 byte.writeUint16(len)
                 for (let name in double_keys) {
                     byte.writeUTFString(name)
-                    byte.writeint16(double_keys[name])
+                    byte.writeInt16(double_keys[name])
                 }
             }
 
-            byte.writeUint16(body.length)
+            console.log("body", name, body.length)
+            byte.writeInt16(body.length)
             for (let j = 0; j < body.length; j++) {
                 for (let k = 0; k < body[j].length; k++) {  //0:int 1:string 2:json;  
                     if (head_type[k] == 0) {
-                        byte.writeint16(body[j][k])
+                        byte.writeVarInt(body[j][k])
                     } else if (head_type[k] == 1) {
                         byte.writeUTFString(body[j][k])
                     } else if (head_type[k] == 2) {
@@ -171,13 +170,13 @@ class DbWriter {
         byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate())
         byte.writeUint8(heads["file_num"])
 
-        byte.writeUint16(heads["tables"].length)
+        byte.writeVarInt(heads["tables"].length)
         for (let i = 0; i < heads["tables"].length; i++) {
             let hdInfo = headsDataInfo[i]
             let bodyInfo = bodysInfo[i]
             byte.writeUTFString(heads["tables"][i])
-            byte.writeUint32(hdInfo["offset"]) // headdata_off
-            byte.writeUint32(bodyInfo["offset"]) // bodydata_off
+            byte.writeVarInt(hdInfo["offset"]) // headdata_off
+            byte.writeVarInt(bodyInfo["offset"]) // bodydata_off
             byte.writeUint8(bodyInfo["bodyIdx"]) // bodydata_index
         }
 

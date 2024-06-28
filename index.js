@@ -47,6 +47,8 @@ function TestByte() {
         byte.writeInt16(-88)
         byte.writeUint16(88)
         byte.writeUint8(7)
+        byte.writeInt8(-6)
+        byte.writeBigInt(1704038400123)
         byte.writeUTFBytes("hello世界")
         byte.writeUTFString("你好世界abc")
         byte.writeUTFString32("你好世界abc32")
@@ -62,13 +64,15 @@ function TestByte() {
         log(byte2.readInt16())
         log(byte2.readUint16())
         log(byte2.readUint8())
+        log(byte2.readInt8())
+        log(byte2.readBigInt())
         log(byte2.readUTFBytes(getByteLength("hello世界")))
         log(byte2.readUTFString())
         log(byte2.readUTFString32())
         log(byte2.readByte())
     }
 }
-// TestByte()
+TestByte()
 
 function main() {
     const dbWriter = new DbWriter();
