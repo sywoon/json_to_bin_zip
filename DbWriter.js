@@ -1,10 +1,11 @@
-const { assert } = require('console');
-const fs = require('fs');
-const Byte = require ("./Byte").Byte
+const { assert } = require("console");
+const fs = require("fs");
+const Byte = require("./Byte").Byte;
+
+let showlog = false;
 
 class DbWriter {
-    constructor() {
-    }
+    constructor() {}
 
     //json格式：
     // heads.json  表头信息：所有表名、表头、表头类型、双键映射(多列映射为id)、总表数
@@ -13,10 +14,10 @@ class DbWriter {
     //      ["id", "name", "time"],
     //      ["id", "name", "effect"]
     //  ]
-    //  heads_type: [  0:int 1:string 2:json;  
+    //  heads_type: [  0:int 1:string 2:json;
     //                int 默认是 0 string 默认是""" json 默认 是 null
-    //      [0, 1, 0], 
-    //      [0, 1, 2],  
+    //      [0, 1, 0],
+    //      [0, 1, 2],
     //  double_keys:[  列的约定在导表工具中 这里并不知道 只有做业务的人清楚
     //      "beatGame_treasure":{"1001_1":1,"1001_2":2,
     //      "rule_worldSkill":{"1_0":1000,"1_1":1001,
@@ -60,140 +61,178 @@ class DbWriter {
     //         [ [int16, string, ...], [...], ...]  json采用字符串方式存储和解析
 
     jsonToBin() {
-        let heads = this.readJson('heads');
-        console.log("head", heads["file_num"], heads["tables"].length)
+        let heads = this.readJson("heads");
+        console.log("head", heads["file_num"], heads["tables"].length);
 
-        let bodysInfo = []
-        let bodyBytes = []
-        let tableIdx = 0
-        for (let i = 0; i<heads["file_num"]; i++) {
-            let bodys = this.readJson(`data${i+1}`);
-            let byte = this.bodyToBin(tableIdx, i, heads, bodys, bodysInfo)
-            bodyBytes.push(byte)
-            tableIdx += bodys.values.length
+        // { headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
+        let tablesInfo = []; 
+        let bodyBytes = [];   //每个data文件的二进制数据byte对象
+        let tableIdx = 0;
+        for (let i = 0; i < heads["file_num"]; i++) {
+            let bodyData = this.readJson(`data${i + 1}`);  //一个data*.json文件
+            let byte = this.bodyToBin(tableIdx, i, heads, bodyData, tablesInfo);
+            bodyBytes.push(byte);
+            tableIdx += bodyData.values.length;
         }
 
-        let headByte = this.headToBin(heads, bodysInfo)
-        this.saveBin(headByte, bodyBytes)
+        let headByte = this.headToBin(heads, tablesInfo);
+        this.saveBin(headByte, bodyBytes);
     }
 
     saveBin(headByte, bodyBytes) {
         try {
-            fs.mkdirSync('./data', { recursive: true });
+            fs.mkdirSync("./data", { recursive: true });
             let pathHead = `./data/heads.db`;
-            fs.writeFileSync(pathHead, Buffer.from(headByte.buffer))
+            fs.writeFileSync(pathHead, Buffer.from(headByte.buffer));
 
-            for (let i = 0; i<bodyBytes.length; i++) {
-                let pathBody = `./data/data${i}.db`
-                fs.writeFileSync(pathBody , Buffer.from(bodyBytes[i].buffer))
+            for (let i = 0; i < bodyBytes.length; i++) {
+                let pathBody = `./data/data${i + 1}.db`;
+                fs.writeFileSync(pathBody, Buffer.from(bodyBytes[i].buffer));
             }
         } catch (err) {
             console.error("save bin file failed", err);
         }
     }
 
-    //tableIdx:表开始索引 由于有多个data文件 且公用一个head
-    bodyToBin(tableIdx, bodyIdx, heads, bodys, bodysInfo) {
-        assert(heads["tables"].length >= bodys.values.length, "body data error")
+    //tableStart:表开始索引 由于有多个data文件 且公用一个head
+    //bodyIdx: 第几个data文件
+    bodyToBin(tableStart, dataFileIdx, heads, bodyData, tablesInfo) {
+        assert(heads["tables"].length >= bodyData.values.length, "body data error");
 
-        let byte = new Byte()
-        let date = new Date()
-        byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate())
-        byte.writeVarInt(heads["tables"].length)
+        let byte = new Byte();
+        let date = new Date();
+        byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
+        byte.writeVarInt(heads["tables"].length);  //总表数
 
-        for (let i = 0; i < bodys.values.length; i++) {
-            let name = heads["tables"][i+tableIdx]
-            let head = heads["heads"][i+tableIdx]
-            let head_type = heads["heads_type"][i+tableIdx]
-            let body = bodys.values[i]
-
+        for (let i = 0; i < bodyData.values.length; i++) {
+            let tableIdx = i + tableStart;
+            let name = heads["tables"][tableIdx];
+            let head = heads["heads"][tableIdx];
+            let head_type = heads["heads_type"][tableIdx];
+            let double_keys = heads["double_keys"][name]
+            let body = bodyData.values[i];
             //每个表数据的偏移
-            //有多个data文件 按顺序叠加 
-            bodysInfo.push({offset:byte.pos, bodyIdx:bodyIdx})  
-            if (!heads["double_keys"][name]) {
-                byte.writeInt16(0) // double_keys num
-            } else {
-                let double_keys = heads["double_keys"][name]
-                let len = Object.keys(double_keys).length
-                byte.writeUint16(len)
-                for (let name in double_keys) {
-                    byte.writeUTFString(name)
-                    byte.writeInt16(double_keys[name])
-                }
-            }
+            //有多个data文件 按顺序叠加
+            tablesInfo.push({ bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name });
 
-            console.log("body", name, body.length)
-            byte.writeInt16(body.length)
-            for (let j = 0; j < body.length; j++) {
-                for (let k = 0; k < body[j].length; k++) {  //0:int 1:string 2:json;  
-                    let v = body[j][k]
-                    if (head_type[k] == 0) {
-                        byte.writeVarInt(v)
-                    } else if (head_type[k] == 1) {
-                        byte.writeUTFString(v)
-                    } else if (head_type[k] == 2) {
-                        byte.writeUTFString(JSON.stringify(v))
-                    } else if (head_type[k] == 3) {
-                        byte.writeFloat32(JSON.stringify(v))
-                    } else if (head_type[k] == 4) {
-                        byte.writeAny(JSON.stringify(v))
-                    }
+            showlog |= name === "suit_suitDecompose";
+            showlog && console.log("writebody", i, name, byte.pos, byte.length);
+            this.oneTableBodyToBin(byte, name, head, head_type, double_keys, body);
+        }
+        return byte;
+    }
+
+    // data*.json => data*.db
+    //  name: utf8string
+    //  double_keys: uint16 有多少列映射到id
+    //    for: map映射 数据量还挺多
+    //      key: utf8string  多列的关联 "1_0"
+    //      value: uint16  id 1000
+    //  values: uint16 有多少行数据
+    //    for: 行数据
+    //      for: 列数据
+    //        value: 根据head类型0:int 1:string 2:json 3:float 4:any 写入方式不同
+    oneTableBodyToBin(byte, name, head, head_type, double_keys, body) {
+        byte.writeUTFString(name); //方便读取时验证
+
+        if (!double_keys) {
+            byte.writeUint16(0); // double_keys num
+        } else {
+            let len = Object.keys(double_keys).length;
+            byte.writeUint16(len);
+            for (let key of Object.keys(double_keys)) {
+                byte.writeUTFString(key);
+                byte.writeUint16(double_keys[key]);
+            }
+        }
+
+        showlog && console.log("body", name, body.length, head_type, head);
+        byte.writeUint16(body.length);
+        for (let j = 0; j < body.length; j++) {  //line
+            for (let k = 0; k < body[j].length; k++) {  //column
+                //0:int 1:string 2:json 3:float 4:any
+                let v = body[j][k];
+                if (head_type[k] == 0) {
+                    byte.writeVarInt(v);
+                } else if (head_type[k] == 1) {
+                    byte.writeUTFString(v);
+                } else if (head_type[k] == 2) {
+                    byte.writeUTFString(JSON.stringify(v));
+                } else if (head_type[k] == 3) {
+                    byte.writeFloat32(v);
+                } else if (head_type[k] == 4) {
+                    byte.writeAny(v);
+                } else {
+                    console.error("head type error", head_type[k]);
                 }
             }
         }
-        return byte
     }
 
     //为了减少head部分的解析 将表头数据独立存放 只有用到某个表时 才需要解析这块数据
-    headDataToBin(heads, headDatasInfo) {
-        let byte = new Byte()
+    // for tables:   单个表、单个表... 多块独立 可动态读取
+    //   col_num: uint8 列数
+    //     name: utf8string
+    //     type: uint8  0:int 1:string 2:json 3:float 4:any
+    headDataToBin(heads, tablesInfo) {
+        assert(heads["tables"].length == tablesInfo.length, "tables num error")
+        let byte = new Byte();
         for (let i = 0; i < heads["tables"].length; i++) {
-            headDatasInfo.push({offset:byte.pos})  
+            let name = heads["tables"][i];
+            assert(name == tablesInfo[i]["name"], "table name error", name, tablesInfo[i]["name"]);
+            tablesInfo[i]["headOffset"] = byte.pos;
 
-            let head = heads["heads"][i]
-            let head_type = heads["heads_type"][i]
-            byte.writeUint8(head.length)
+            let head = heads["heads"][i];
+            let head_type = heads["heads_type"][i];
+            byte.writeUint8(head.length);
             for (let j = 0; j < head.length; j++) {
-                byte.writeUTFString(head[j])
+                byte.writeUTFString(head[j]);
             }
             for (let j = 0; j < head_type.length; j++) {
-                byte.writeUint8(head_type[j])
+                byte.writeUint8(head_type[j]);
             }
         }
-        return byte
+        return byte;
     }
 
-    headToBin(heads, bodysInfo) {
-        assert(heads["tables"].length == bodysInfo.length, "body num error")
+    // head二进制格式数据
+    //  version: uint16   20240626
+    //  file_num: uint8
+    //  tables_num: uint16
+    //    for: tables_num
+    //      name: utf8string    表名
+    //      headdata_off: varint head数据块中的偏移
+    //      bodydata_off: varint body数据块中的偏移
+    //      datafile_index: uint8 第几个数据文件
+    headToBin(heads, tablesInfo) {
+        assert(heads["tables"].length == tablesInfo.length, "body num error");
 
-        let headsDataInfo = []
-        let headDataByte = this.headDataToBin(heads, headsDataInfo)
-        assert(heads["tables"].length == headsDataInfo.length, "headdata num error")
+        let headDataByte = this.headDataToBin(heads, tablesInfo);
+        assert(heads["tables"].length == tablesInfo.length, "headdata num error");
 
-        let byte = new Byte()
+        let byte = new Byte();
         let date = new Date();
-        byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate())
-        byte.writeUint8(heads["file_num"])
+        byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
+        byte.writeUint8(heads["file_num"]);
 
-        byte.writeVarInt(heads["tables"].length)
+        byte.writeVarInt(heads["tables"].length);
         for (let i = 0; i < heads["tables"].length; i++) {
-            let hdInfo = headsDataInfo[i]
-            let bodyInfo = bodysInfo[i]
-            byte.writeUTFString(heads["tables"][i])
-            byte.writeVarInt(hdInfo["offset"]) // headdata_off
-            byte.writeVarInt(bodyInfo["offset"]) // bodydata_off
-            byte.writeUint8(bodyInfo["bodyIdx"]) // bodydata_index
+            let tableInfo = tablesInfo[i];  //{ headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
+            byte.writeUTFString(tableInfo["name"]);
+            byte.writeVarInt(tableInfo["headOffset"]); // headdata_off
+            byte.writeVarInt(tableInfo["bodyOffset"]); // bodydata_off
+            byte.writeUint8(tableInfo["dataFileIdx"]); // dataFile_index
         }
 
-        byte.writeArrayBuffer(headDataByte.buffer)
-        return byte
+        byte.writeArrayBuffer(headDataByte.buffer);
+        return byte;
     }
 
     readJson(name) {
         let path = `./json/${name}.json`;
         let data = null;
         try {
-            const text = fs.readFileSync(path, 'utf8');
+            const text = fs.readFileSync(path, "utf8");
             data = JSON.parse(text);
         } catch (err) {
             console.error(`read failed:${path}`, err);
@@ -202,9 +241,7 @@ class DbWriter {
     }
 }
 
-
 module.exports = DbWriter;
-
 
 //参考1：某个表的格式
 //  |--------|
@@ -224,5 +261,3 @@ module.exports = DbWriter;
 // 	{	field = 'android'			, value = ''					, desc = "android平台下值"				},
 // 	{	field = 'note'				, value = ''					, desc = "备注"							},
 // 	{})
-
-

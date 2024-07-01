@@ -473,21 +473,20 @@ var Byte = exports.Byte = /** @class */ (function () {
     Byte.prototype.writeVarInt = function (value) {
         let rtn = true;
         if (value >= -128 && value <= 127) {
-            this.writeUint8(0);
+            this.writeInt8(0);
             this.writeInt8(value);
         } else if (value >= -32768 && value <= 32767) {
-            this.writeUint8(1);
+            this.writeInt8(1);
             this.writeInt16(value);
         } else if (value >= -2147483648 && value <= 2147483647) {
-            this.writeUint8(2);
+            this.writeInt8(2);
             this.writeInt32(value);
         } else if (value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER) {
-            this.writeUint8(3);
+            this.writeInt8(3);
             this.writeBigInt(value);
         } else {
             // throw new RangeError("Value is out of bounds for int32:" + value);
-            console.error("Value is out of bounds for int32:" + value);
-            this.writeUint8(0);
+            // console.error("Value is out of bounds for int32:" + value);
             this.writeInt8(-1);
             rtn = false;
         }
@@ -495,7 +494,7 @@ var Byte = exports.Byte = /** @class */ (function () {
     }
 
     Byte.prototype.readVarInt = function () {
-        let flat = this.readUint8();
+        let flat = this.readInt8();
         switch (flat) {
             case 0:
                 return this.readInt8();
@@ -507,14 +506,14 @@ var Byte = exports.Byte = /** @class */ (function () {
                 return this.readBigInt();
             default:
                 // throw new RangeError("Invalid flat value");
-                console.error("Invalid flat value");
-                return null;
+                // console.error("Invalid flat value");
+                return NaN;
         }
     }
 
     // 优先json 再转Number-转int 
     Byte.prototype.writeAny = function (value) {
-        if (typeof value == null) {
+        if (value == null) {
             this.writeInt8(0);
         } else if (typeof value === 'string') {
             this.writeInt8(1);
@@ -549,7 +548,7 @@ var Byte = exports.Byte = /** @class */ (function () {
             case 4:
                 return JSON.parse(this.readUTFString());
             default:
-                console.error("Invalid flag");
+                console.error("readAny Invalid flag", flag);
                 return null;
         }
     }

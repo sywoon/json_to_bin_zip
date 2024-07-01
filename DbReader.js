@@ -16,7 +16,19 @@ class DbReader {
         // console.log(buf.toString('hex')); // 输出十六进制字符串
 
         let headInfo = this.readHead(buf)
-        this.saveJson(headInfo, null)
+        let tableIdx = 0
+        let bodyInfos = []
+        for (let i = 0; i< headInfo["file_num"]; i++) {
+            let bodyBuf = this.readDbFile(`data${i+1}`)
+            if (bodyBuf == null) {
+                return
+            }
+            console.log(`data${i+1}.db`, bodyBuf.length)
+            let bodyInfo = this.readBody(tableIdx, i, bodyBuf, headInfo)
+            tableIdx += bodyInfo["bodys"].length
+            bodyInfos.push(bodyInfo)
+        }
+        this.saveJson(headInfo, bodyInfos)
     }
 
     readDbFile(name) {
@@ -31,16 +43,16 @@ class DbReader {
         }
     }
 
-    saveJson(headInfo, body) {
+    saveJson(headInfo, bodyInfos) {
         try {
             fs.mkdirSync('./data2', { recursive: true });
             let pathHead = `./data2/heads.json`;
             fs.writeFileSync(pathHead, JSON.stringify(headInfo))
 
-            // for (let i = 0; i<bodyBytes.length; i++) {
-            //     let pathBody = `./data/data${i}.db`
-            //     fs.writeFileSync(pathBody , Buffer.from(bodyBytes[i].buffer))
-            // }
+            for (let i = 0; i<bodyInfos.length; i++) {
+                let pathBody = `./data2/data${i+1}.json`
+                fs.writeFileSync(pathBody, JSON.stringify(bodyInfos[i]))
+            }
         } catch (err) {
             console.error("save bin file failed", err);
         }
@@ -85,8 +97,64 @@ class DbReader {
         return headInfo
     }
 
-    readBody() {
+    readBody(tableIdx, bodyIdx, byte, headInfo) {
+        let bodyInfo = []
+        bodyInfo["date"] = byte.readUint16()
 
+        let bodys = []
+        let tableNum = byte.readVarInt()
+        console.log("tableNum", tableNum, tableIdx)
+
+        let showlog = false
+        for (let i =0; i<tableNum; i++) {
+            let table = headInfo["tables"][i+tableIdx]  //{"name":"activity","headOffset":0,"bodyOffset":5,"bodyIdx":0},
+            let head = headInfo["head_titles"][i+tableIdx]  //["id","name","fightItem","reward"
+            let headType = headInfo["head_types"][i+tableIdx]  //[0,1,0,0,0,
+
+            showlog && console.log("buff", byte.pos, byte.length)
+            showlog && console.log("will read name", table.name, head, headType)
+
+            let name = byte.readUTFString()
+            showlog |= name === "suit_suitDecompose"
+            showlog && console.log("name", table.name, name)
+            if (table.name != name) {
+                console.log("table name error", table.name, name)
+                break;
+            }
+
+            let doubleKeys = {}
+            let doubleKeysNum = byte.readInt16()
+            for (let j = 0; j<doubleKeysNum; j++) {
+                let key = byte.readUTFString()
+                let offset = byte.readInt16()
+                doubleKeys[key] = offset
+            }
+            showlog && console.log("doubleKeys", Object.keys(doubleKeys).length)
+
+            let bodyLen = byte.readInt16()
+            showlog && console.log("bodylen", bodyLen)
+            let body = []
+            for (let j = 0; j<bodyLen; j++) {
+                let row = []
+                for (let k = 0; k<head.length; k++) {
+                    if (headType[k] == 0) {
+                        row.push(byte.readVarInt())
+                    } else if (headType[k] == 1) {
+                        row.push(byte.readUTFString())
+                    } else if (headType[k] == 2) {
+                        row.push(JSON.parse(byte.readUTFString()))
+                    } else if (headType[k] == 3) {
+                        row.push(byte.readFloat32())
+                    } else if (headType[k] == 4) {
+                        row.push(byte.readAny())
+                    }
+                }
+                body.push(row)
+            }
+            bodys.push(body)
+        }
+        bodyInfo["bodys"] = bodys
+        return bodyInfo
     }
 }
 

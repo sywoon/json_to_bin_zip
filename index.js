@@ -161,7 +161,7 @@ TestByte()
 
 function main() {
     const dbWriter = new DbWriter();
-    // dbWriter.jsonToBin();
+    dbWriter.jsonToBin();
 
     const dbReader = new DbReader();
     dbReader.binToJson();
