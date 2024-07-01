@@ -102,7 +102,7 @@ class DbWriter {
         let byte = new Byte();
         let date = new Date();
         byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
-        byte.writeVarInt(heads["tables"].length);  //总表数
+        byte.writeVarInt(bodyData.values.length);  //当前data包含的表数  注意不是：heads["tables"].length
 
         for (let i = 0; i < bodyData.values.length; i++) {
             let tableIdx = i + tableStart;

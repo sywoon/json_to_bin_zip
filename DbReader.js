@@ -69,8 +69,8 @@ class DbReader {
             let name = byte.readUTFString()
             let headOffset = byte.readVarInt()
             let bodyOffset = byte.readVarInt()
-            let bodyIdx = byte.readUint8()
-            tables.push({name:name, headOffset:headOffset, bodyOffset:bodyOffset, bodyIdx:bodyIdx})
+            let dataFileIdx = byte.readUint8()
+            tables.push({name:name, headOffset:headOffset, bodyOffset:bodyOffset, dataFileIdx:dataFileIdx})
         }
         headInfo["tables"] = tables
 
@@ -78,15 +78,15 @@ class DbReader {
         let headTitles = []
         let headTypes = []
         for (let i = 0; i < headInfo["table_num"]; i++) {
-            let headLen = byte.readUint8()
+            let columnLen = byte.readUint8()
             let headTitle = []
-            for (let i = 0; i< headLen; i++) {
+            for (let i = 0; i< columnLen; i++) {
                 headTitle.push(byte.readUTFString())
             }
             headTitles.push(headTitle)
 
             let headType = []
-            for (let i = 0; i< headLen; i++) {
+            for (let i = 0; i< columnLen; i++) {
                 headType.push(byte.readUint8())
             }
             headTypes.push(headType)
@@ -97,19 +97,21 @@ class DbReader {
         return headInfo
     }
 
-    readBody(tableIdx, bodyIdx, byte, headInfo) {
+    readBody(tableStart, dataFileIdx, byte, headInfo) {
         let bodyInfo = []
         bodyInfo["date"] = byte.readUint16()
 
         let bodys = []
         let tableNum = byte.readVarInt()
-        console.log("tableNum", tableNum, tableIdx)
+        console.log("read tableNum", tableNum, tableStart)
 
         let showlog = false
+        let doubleKeys = {}
         for (let i =0; i<tableNum; i++) {
-            let table = headInfo["tables"][i+tableIdx]  //{"name":"activity","headOffset":0,"bodyOffset":5,"bodyIdx":0},
-            let head = headInfo["head_titles"][i+tableIdx]  //["id","name","fightItem","reward"
-            let headType = headInfo["head_types"][i+tableIdx]  //[0,1,0,0,0,
+            let tableIdx = i + tableStart;
+            let table = headInfo["tables"][tableIdx]  //{"name":"activity","headOffset":0,"bodyOffset":5,"dataFileIdx":0},
+            let head = headInfo["head_titles"][tableIdx]  //["id","name","fightItem","reward"
+            let headType = headInfo["head_types"][tableIdx]  //[0,1,0,0,0,
 
             showlog && console.log("buff", byte.pos, byte.length)
             showlog && console.log("will read name", table.name, head, headType)
@@ -122,14 +124,15 @@ class DbReader {
                 break;
             }
 
-            let doubleKeys = {}
+            let doubleKey = {}
             let doubleKeysNum = byte.readInt16()
             for (let j = 0; j<doubleKeysNum; j++) {
                 let key = byte.readUTFString()
-                let offset = byte.readInt16()
-                doubleKeys[key] = offset
+                let id = byte.readInt16()
+                doubleKey[key] = id
             }
-            showlog && console.log("doubleKeys", Object.keys(doubleKeys).length)
+            doubleKeys[name] = doubleKey
+            showlog && console.log("doubleKey", Object.keys(doubleKey).length)
 
             let bodyLen = byte.readInt16()
             showlog && console.log("bodylen", bodyLen)
@@ -154,6 +157,7 @@ class DbReader {
             bodys.push(body)
         }
         bodyInfo["bodys"] = bodys
+        bodyInfo["doubleKeys"] = doubleKeys
         return bodyInfo
     }
 }

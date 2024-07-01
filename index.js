@@ -156,8 +156,8 @@ function TestByte() {
     console.log("---TestByte---end---")
 }
 
-TestMsgPack()
-TestByte()
+// TestMsgPack()
+// TestByte()
 
 function main() {
     const dbWriter = new DbWriter();
