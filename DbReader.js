@@ -30,12 +30,6 @@ class DbReader {
             }
             tableIdx += bodyInfo["bodys"].length;
             bodyInfos.push(bodyInfo);
-
-            let txt = JSON.stringify(bodyInfo);
-            if (txt == "[]") {
-                console.error("readBody failed", i, tableIdx, bodyInfo["bodys"].length);
-                return null
-            }
         }
         this.saveJson(headInfo, bodyInfos);
     }
@@ -74,7 +68,6 @@ class DbReader {
                 let pathBody = `./data2/data${i + 1}.json`;
                 try {
                     let txt = JSON.stringify(bodyInfos[i], replacer)
-                    console.log(pathBody, txt.length, bodyInfos[i])
                     fs.writeFileSync(pathBody, txt);
                 } catch (err) {
                     console.error("save body file failed", pathBody, err);
@@ -132,8 +125,7 @@ class DbReader {
         bodyInfo["version"] = byte.readUint32();
 
         let bodys = [];
-        let tableNum = byte.readUint32();
-        console.log("read tableNum", dataFileIdx, bodyInfo["version"], tableNum, tableStart);
+        let tableNum = byte.readVarInt();
 
         for (let i = 0; i < tableNum; i++) {
             let tableIdx = i + tableStart;
@@ -148,13 +140,6 @@ class DbReader {
             }
             bodys.push(body);
         }
-
-        let txt = JSON.stringify(bodys);
-        if (txt == "[]") {
-            console.error("readBody failed", dataFileIdx, tableStart, tableNum);
-            return null
-        }
-
         bodyInfo["bodys"] = bodys;
         return bodyInfo;
     }
@@ -162,20 +147,15 @@ class DbReader {
     // { name: name, doubleKey: doubleKey, values: values }
     readOneTableBody(byte, tableInfo, head, headType) {
         if (tableInfo.bodyOffset != byte.pos) {
-            console.log("bodyOffset error", name, tableInfo.bodyOffset, byte.pos);
+            console.error("bodyOffset error", name, tableInfo.bodyOffset, byte.pos);
             return null;
         }
 
         let name = byte.readUTFString();
         if (tableInfo.name != name) {
-            console.log("table name error", name, name);
+            console.error("table name error", name, name);
             return null;
         }
-
-        let showlog = true;
-        // showlog = name === "suit_suitDecompose";
-        // showlog && console.log("buff", byte.pos, byte.length);
-        // showlog && console.log("will read name", name, head, headType);
 
         let doubleKey = {};
         let doubleKeysNum = byte.readVarInt();

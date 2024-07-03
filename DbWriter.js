@@ -2,67 +2,13 @@ const { assert } = require("console");
 const fs = require("fs");
 const Byte = require("./Byte").Byte;
 
-let showlog = false;
 
 class DbWriter {
     constructor() {}
 
-    //json格式：
-    // heads.json  表头信息：所有表名、表头、表头类型、双键映射(多列映射为id)、总表数
-    //  tables:["activity", "skill"]
-    //  heads: [
-    //      ["id", "name", "time"],
-    //      ["id", "name", "effect"]
-    //  ]
-    //  heads_type: [  0:int 1:string 2:json;
-    //                int 默认是 0 string 默认是""" json 默认 是 null
-    //      [0, 1, 0],
-    //      [0, 1, 2],
-    //  double_keys:[  列的约定在导表工具中 这里并不知道 只有做业务的人清楚
-    //      "beatGame_treasure":{"1001_1":1,"1001_2":2,
-    //      "rule_worldSkill":{"1_0":1000,"1_1":1001,
-    //  ]
-    //  "file_num":2
-    //
-    // data1.json data2.json
-    //   values:[
-    //      [ 表1的数据
-    //          [1, "name1", 1000],
-    //          [2, "name2", 2000],
-    //      ],
-    //   ]
-
-    //第一版：先转为二进制数据 比对大小
-    //          heads.json data1.json data2.json
-    // 原始大小：145k        4.34M      2.5M
-    // 第一版：  39.4k       4.01M      2.28M
-    // 格式：
-    //  head_info: 表头信息部分
-    //   version: uint16   20240626
-    //   file_num: uint8
-    //   tables_num: uint16
-    //     table1:
-    //       name: utf8string
-    //       headdata_off: uint32 数据块中的偏移
-    //       bodydata_off: uint32 数据块中的偏移
-    //       bodydata_index: uint8 第几个数据文件
-
-    //  head_data: 表头数据部分
-    //       heads_num: uint8 列数
-    //         heads: [utf8string, ...]
-    //         heads_type: [uint8, ...]
-
-    //  body_data1: 表内容数据
-    //   version: uint16   20240626
-    //    table1:
-    //      double_keys num: uint16
-    //         [<utf8string, uint16>, ...]  映射对
-    //      values_num: uint16  根据heads_type读取内容 0:int 1:string 2:json 3:float 4:any
-    //         [ [int16, string, ...], [...], ...]  json采用字符串方式存储和解析
 
     jsonToBin() {
         let heads = this.readJson("heads");
-        // console.log("head", heads["file_num"], heads["tables"].length);
 
         // { headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
         let tablesInfo = []; 
@@ -102,7 +48,7 @@ class DbWriter {
         let byte = new Byte();
         let date = new Date();
         byte.writeUint32(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
-        byte.writeUint32(bodyData.values.length);  //当前data包含的表数  注意不是：heads["tables"].length
+        byte.writeVarInt(bodyData.values.length);  //当前data包含的表数  注意不是：heads["tables"].length
 
         for (let i = 0; i < bodyData.values.length; i++) {
             let tableIdx = i + tableStart;
@@ -114,11 +60,9 @@ class DbWriter {
             //每个表数据的偏移
             //有多个data文件 按顺序叠加
             tablesInfo.push({ bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name });
-
-            showlog |= name === "suit_suitDecompose";
-            // showlog && console.log("writebody", i, name, byte.pos, byte.length);
             this.oneTableBodyToBin(byte, name, head, head_type, double_keys, body);
         }
+        console.log("write body", dataFileIdx, byte.pos)
         return byte;
     }
 
@@ -146,7 +90,6 @@ class DbWriter {
             }
         }
 
-        // showlog && console.log("body", name, body.length, head_type, head);
         byte.writeVarInt(body.length);
         for (let j = 0; j < body.length; j++) {  //line
             for (let k = 0; k < body[j].length; k++) {  //column
@@ -217,7 +160,7 @@ class DbWriter {
         byte.writeUint8(heads["file_num"]);
         byte.writeVarInt(heads["tables"].length);
 
-        // console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
+        console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
         for (let i = 0; i < heads["tables"].length; i++) {
             let tableInfo = tablesInfo[i];  //{ headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
             byte.writeUTFString(tableInfo["name"]);
