@@ -62,7 +62,7 @@ class DbWriter {
 
     jsonToBin() {
         let heads = this.readJson("heads");
-        console.log("head", heads["file_num"], heads["tables"].length);
+        // console.log("head", heads["file_num"], heads["tables"].length);
 
         // { headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
         let tablesInfo = []; 
@@ -101,8 +101,8 @@ class DbWriter {
 
         let byte = new Byte();
         let date = new Date();
-        byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
-        byte.writeVarInt(bodyData.values.length);  //当前data包含的表数  注意不是：heads["tables"].length
+        byte.writeUint32(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
+        byte.writeUint32(bodyData.values.length);  //当前data包含的表数  注意不是：heads["tables"].length
 
         for (let i = 0; i < bodyData.values.length; i++) {
             let tableIdx = i + tableStart;
@@ -116,7 +116,7 @@ class DbWriter {
             tablesInfo.push({ bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name });
 
             showlog |= name === "suit_suitDecompose";
-            showlog && console.log("writebody", i, name, byte.pos, byte.length);
+            // showlog && console.log("writebody", i, name, byte.pos, byte.length);
             this.oneTableBodyToBin(byte, name, head, head_type, double_keys, body);
         }
         return byte;
@@ -136,18 +136,18 @@ class DbWriter {
         byte.writeUTFString(name); //方便读取时验证
 
         if (!double_keys) {
-            byte.writeUint16(0); // double_keys num
+            byte.writeVarInt(0); // double_keys num
         } else {
             let len = Object.keys(double_keys).length;
-            byte.writeUint16(len);
+            byte.writeVarInt(len);
             for (let key of Object.keys(double_keys)) {
                 byte.writeUTFString(key);
-                byte.writeUint16(double_keys[key]);
+                byte.writeVarInt(double_keys[key]);
             }
         }
 
-        showlog && console.log("body", name, body.length, head_type, head);
-        byte.writeUint16(body.length);
+        // showlog && console.log("body", name, body.length, head_type, head);
+        byte.writeVarInt(body.length);
         for (let j = 0; j < body.length; j++) {  //line
             for (let k = 0; k < body[j].length; k++) {  //column
                 //0:int 1:string 2:json 3:float 4:any
@@ -212,10 +212,12 @@ class DbWriter {
 
         let byte = new Byte();
         let date = new Date();
-        byte.writeUint16(date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate());
+        let dateValue = date.getFullYear() * 10000 + date.getMonth() * 100 + date.getDate();
+        byte.writeUint32(dateValue);  //20240603
         byte.writeUint8(heads["file_num"]);
-
         byte.writeVarInt(heads["tables"].length);
+
+        console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
         for (let i = 0; i < heads["tables"].length; i++) {
             let tableInfo = tablesInfo[i];  //{ headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
             byte.writeUTFString(tableInfo["name"]);

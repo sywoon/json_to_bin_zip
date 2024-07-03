@@ -466,9 +466,9 @@ var Byte = exports.Byte = /** @class */ (function () {
     }
 
 
-    // 若value在int8范围内 则使用writeint8
-    // 若value在int16范围内 则使用writeInt16
-    // 若value在int32范围内 则使用writeInt32
+    // 若value在int8范围内 则使用writeint8   [-128, 127]
+    // 若value在int16范围内 则使用writeInt16 [-32768, 32767]
+    // 若value在int32范围内 则使用writeInt32 [-2147483648, 2147483647]
     // 安全整数范围是 -(2^53 - 1) 到 2^53 - 1，即 Number.MIN_SAFE_INTEGER 到 Number.MAX_SAFE_INTEGER
     Byte.prototype.writeVarInt = function (value) {
         let rtn = true;

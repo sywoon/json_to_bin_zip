@@ -4,6 +4,7 @@ const bl = require('bl')
 const log = console.log
 const DbReader = require("./DbReader")
 const DbWriter = require("./DbWriter")
+const Logger = require("./Logger")
 
 
 /*
@@ -110,8 +111,8 @@ function TestByte() {
         byte.writeFloat32(3.14)
         byte.writeFloat64(3.1415926)
         byte.writeInt32(99)
-        byte.writeInt16(-88)
-        byte.writeUint16(88)
+        byte.writeInt16(-32768)  //[-32768, 32767]
+        byte.writeUint16(32767)
         byte.writeUint8(7)
         byte.writeInt8(-6)
         byte.writeBigInt(1704038400123)
@@ -155,6 +156,11 @@ function TestByte() {
     }
     console.log("---TestByte---end---")
 }
+
+Logger.init()
+console.log("Hello, world!")
+console.warn("Hello, world!")
+console.error("Hello, world!")
 
 // TestMsgPack()
 // TestByte()
