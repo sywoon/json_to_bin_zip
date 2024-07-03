@@ -23,9 +23,19 @@ class DbReader {
                 return;
             }
             console.log(`read data${i + 1}.db`, bodyBuf.length);
+            // {version:20240301, bodys:[{name, doubleKey, values}]}
             let bodyInfo = this.readBody(tableIdx, i, bodyBuf, headInfo);
+            if (bodyInfo == null) {
+                return;
+            }
             tableIdx += bodyInfo["bodys"].length;
             bodyInfos.push(bodyInfo);
+
+            let txt = JSON.stringify(bodyInfo);
+            if (txt == "[]") {
+                console.error("readBody failed", i, tableIdx, bodyInfo["bodys"].length);
+                return null
+            }
         }
         this.saveJson(headInfo, bodyInfos);
     }
@@ -45,24 +55,37 @@ class DbReader {
 
     // headInfo: {version:20240301, file_num:2, table_num:999, tables:[{name,headOffset, bodyOffset}], 
     //  head_titles:["id", "name"], head_types:[0, 1]}
-    // bodyInfos: [[version:20240301, bodys:[], doubleKeys:{}]]
+    // bodyInfos: [[version:20240301, bodys:[]]]
     saveJson(headInfo, bodyInfos) {
+        function replacer(key, value) {
+            if (typeof value === 'function' || typeof value === 'undefined') {
+                console.error("json.stringify error", key, value)
+                return null;
+            }
+            return value;
+        }
+
         try {
             fs.mkdirSync("./data2", { recursive: true });
             let pathHead = `./data2/heads.json`;
-            fs.writeFileSync(pathHead, JSON.stringify(headInfo));
+            fs.writeFileSync(pathHead, JSON.stringify(headInfo, replacer));
 
             for (let i = 0; i < bodyInfos.length; i++) {
                 let pathBody = `./data2/data${i + 1}.json`;
-                console.log(pathBody, bodyInfos[i])
-                fs.writeFileSync(pathBody, JSON.stringify(bodyInfos[i]));
+                try {
+                    let txt = JSON.stringify(bodyInfos[i], replacer)
+                    console.log(pathBody, txt.length, bodyInfos[i])
+                    fs.writeFileSync(pathBody, txt);
+                } catch (err) {
+                    console.error("save body file failed", pathBody, err);
+                }
             }
         } catch (err) {
             console.error("save bin file failed", err);
         }
     }
 
-    // {version:20240301, file_num:2, table_num:999, tables:[{name,headOffset, bodyOffset}], 
+    // {version:20240301, file_num:2, table_num:999, tables:[{name, headOffset, bodyOffset, dataFileIdx}], 
     //  head_titles:["id", "name"], head_types:[0, 1]}
     readHead(byte) {
         let headInfo = {};
@@ -105,7 +128,7 @@ class DbReader {
 
     // {version:20240301, bodys:[{name, doubleKey, values}]}
     readBody(tableStart, dataFileIdx, byte, headInfo) {
-        let bodyInfo = [];
+        let bodyInfo = {};
         bodyInfo["version"] = byte.readUint32();
 
         let bodys = [];
@@ -126,10 +149,17 @@ class DbReader {
             bodys.push(body);
         }
 
+        let txt = JSON.stringify(bodys);
+        if (txt == "[]") {
+            console.error("readBody failed", dataFileIdx, tableStart, tableNum);
+            return null
+        }
+
         bodyInfo["bodys"] = bodys;
         return bodyInfo;
     }
 
+    // { name: name, doubleKey: doubleKey, values: values }
     readOneTableBody(byte, tableInfo, head, headType) {
         if (tableInfo.bodyOffset != byte.pos) {
             console.log("bodyOffset error", name, tableInfo.bodyOffset, byte.pos);
@@ -144,8 +174,8 @@ class DbReader {
 
         let showlog = true;
         // showlog = name === "suit_suitDecompose";
-        showlog && console.log("buff", byte.pos, byte.length);
-        showlog && console.log("will read name", name, head, headType);
+        // showlog && console.log("buff", byte.pos, byte.length);
+        // showlog && console.log("will read name", name, head, headType);
 
         let doubleKey = {};
         let doubleKeysNum = byte.readVarInt();
@@ -177,7 +207,10 @@ class DbReader {
             values.push(row);
         }
 
-        let body = { name: name, doubleKey: doubleKey, values: values };
+        let body = { name: name, values: values };
+        if (doubleKeysNum > 0) {
+            body["doubleKey"] = doubleKey
+        }
         return body
     }
 }

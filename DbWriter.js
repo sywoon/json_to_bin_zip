@@ -217,7 +217,7 @@ class DbWriter {
         byte.writeUint8(heads["file_num"]);
         byte.writeVarInt(heads["tables"].length);
 
-        console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
+        // console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
         for (let i = 0; i < heads["tables"].length; i++) {
             let tableInfo = tablesInfo[i];  //{ headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
             byte.writeUTFString(tableInfo["name"]);
