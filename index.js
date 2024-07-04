@@ -169,9 +169,6 @@ function LogColorTest() {
 function JSZipTest() {
     let test = new JSZipDemo();
     test.runTest();
-    return;
-
-    
 }
 
 Logger.init()
@@ -189,5 +186,5 @@ function main() {
     dbReader.binToJson();
 }
 
-// main()
+main()
 
