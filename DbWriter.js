@@ -7,10 +7,16 @@ class DbWriter {
     constructor() {
         this.strByte = new Byte();
         this.strOffset = {};
+        this.strSameInfo = {}
     }
 
-    pushString(str) {
+    pushString(str, desc) {
         if (this.strOffset[str]) {
+            this.strSameInfo[str] = this.strSameInfo[str] || {count:1, str:str, desc:[]};
+            this.strSameInfo[str]["count"]++;
+            if (this.strSameInfo[str]["desc"].indexOf(desc) == -1) {
+                this.strSameInfo[str]["desc"].push(desc);
+            }
             return this.strOffset[str];
         }
 
@@ -19,11 +25,22 @@ class DbWriter {
         return this.strOffset[str];
     }
 
-    writeStrToByte(byte, str) {
-        let offset = this.pushString(str);
+    writeStrToByte(byte, str, desc) {
+        let offset = this.pushString(str, desc);
         byte.writeVarInt(offset);
     }
 
+    testJsonReadTime() {
+        let all = {}
+        let time = Date.now();
+        let heads = this.readJson("heads");
+        all["heads"] = heads
+        for (let i = 0; i < heads["file_num"]; i++) {
+            let bodyData = this.readJson(`data${i + 1}`);  //一个data*.json文件
+            all["body"+i] = bodyData
+        }
+        console.log("read json time", Date.now() - time) 
+    }
 
     jsonToBin() {
         let heads = this.readJson("heads");
@@ -41,6 +58,13 @@ class DbWriter {
 
         let headByte = this.headToBin(heads, tablesInfo);
         this.saveBin(headByte, bodyBytes);
+
+        //测试重复字符串
+        if (false) {
+            let sameStr = Object.values(this.strSameInfo);
+            sameStr.sort((a, b) => b.count - a.count);
+            console.log("string same", sameStr)
+        }
     }
 
     saveBin(headByte, bodyBytes) {
@@ -98,7 +122,7 @@ class DbWriter {
     //      for: 列数据
     //        value: 根据head类型0:int 1:string 2:json 3:float 4:any 写入方式不同
     oneTableBodyToBin(byte, name, head, head_type, double_keys, body) {
-        this.writeStrToByte(byte, name); //方便读取时验证
+        this.writeStrToByte(byte, name, name); //方便读取时验证
 
         if (!double_keys) {
             byte.writeVarInt(0); // double_keys num
@@ -106,7 +130,7 @@ class DbWriter {
             let len = Object.keys(double_keys).length;
             byte.writeVarInt(len);
             for (let key of Object.keys(double_keys)) {
-                this.writeStrToByte(byte, key);
+                this.writeStrToByte(byte, key, name);
                 byte.writeVarInt(double_keys[key]);
             }
         }
@@ -119,10 +143,10 @@ class DbWriter {
                 if (head_type[k] == 0) {
                     byte.writeVarInt(v);
                 } else if (head_type[k] == 1) {
-                    this.writeStrToByte(byte, v);
+                    this.writeStrToByte(byte, v, name);
                 } else if (head_type[k] == 2) {
                     let txt = JSON.stringify(v)
-                    this.writeStrToByte(byte, txt);
+                    this.writeStrToByte(byte, txt, name);
                 } else if (head_type[k] == 3) {
                     byte.writeFloat32(v);
                 } else if (head_type[k] == 4) {
@@ -151,7 +175,7 @@ class DbWriter {
             let head_type = heads["heads_type"][i];
             byte.writeUint8(head.length);
             for (let j = 0; j < head.length; j++) {
-                this.writeStrToByte(byte, head[j]);
+                this.writeStrToByte(byte, head[j], name);
             }
             for (let j = 0; j < head_type.length; j++) {
                 byte.writeUint8(head_type[j]);
@@ -185,7 +209,7 @@ class DbWriter {
         console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
         for (let i = 0; i < heads["tables"].length; i++) {
             let tableInfo = tablesInfo[i];  //{ headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
-            this.writeStrToByte(byte, tableInfo["name"]);
+            this.writeStrToByte(byte, tableInfo["name"], tableInfo["name"]);
             byte.writeVarInt(tableInfo["headOffset"]); // headdata_off
             byte.writeVarInt(tableInfo["bodyOffset"]); // bodydata_off
             byte.writeUint8(tableInfo["dataFileIdx"]); // dataFile_index

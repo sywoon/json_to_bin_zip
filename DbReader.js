@@ -23,6 +23,7 @@ class DbReader {
     }
 
     binToJson() {
+        let time = Date.now();
         let strByte = this.readDbFile("strings");
         if (strByte == null)
             return;
@@ -54,6 +55,7 @@ class DbReader {
             tableIdx += bodyInfo["bodys"].length;
             bodyInfos.push(bodyInfo);
         }
+        console.log("read db time", Date.now() - time) 
         this.saveJson(headInfo, bodyInfos);
     }
 
@@ -86,7 +88,7 @@ class DbReader {
             fs.mkdirSync("./data2", { recursive: true });
 
             let pathStrBuffer = `./data2/strings.json`;
-            fs.writeFileSync(pathStrBuffer, JSON.stringify(this.strBuffer, replacer));
+            fs.writeFileSync(pathStrBuffer, JSON.stringify(Object.values(this.strBuffer)));
 
             let pathHead = `./data2/heads.json`;
             fs.writeFileSync(pathHead, JSON.stringify(headInfo, replacer));

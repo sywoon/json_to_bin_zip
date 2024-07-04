@@ -85,13 +85,56 @@
 3. 读取数据时 若head_type为string 则动态从strings.db中解析出字符串
 
 
+### 读取速度对比
+```
+  json:88ms
+  db:244ms 
+  分析原因：
+    json整体字符串一起分析
+    二进制根据表逐个解析 逐条解析内容; 流程更复杂 所以更久
+```
 
 
-## 第三版 基于压缩技术
-- strings分析
+### string重复分析
 有多少重复的字符串？
 重复的部分有多少是夸文件的？
 
+- 数据量对比
+```
+  全部大小：6.06M
+  去重大小：2.24M
+  根据数据抓取重复字符 安装次数 占的表数 排序后：
+    "null": 33944 几十个表
+    "":空字符串 24984  几十个表
+    { count: 11520, str: '可在套装界面内装备', desc: [ 'suit_suitEquip' ] },
+    { count: 3773, str: 'add_buff', desc: [ 'skill_effect' ] },
+    { count: 2877, str: 'change_attr', desc: [ 'skill_buff' ] },
+    类似的还有name id
+    ...
+    {
+    count: 470,
+    str: '["云游寻宝","sys_treasure",[0],31]',
+    desc: [
+      'backgroundActive_activeTask',
+      'backgroundActive_battlePassTask',
+      'backgroundActive_bgActive3Task',
+      'openActive_activeTask',
+      'return_returnTask',
+      'slg_activeBpTask'
+    ]
+    },
+    ...
+    { count: 279, str: 'buff/+shanghai.png', desc: [ 'skill_buff' ] },
+    ...
+    { count: 144, str: '麻痹项链', desc: [ 'suit_suitEquip' ] },
+    结论：
+    只有少量特殊字符串 才会覆盖大量的表
+    大部分情况都在某个表内部 才会出现大量重复
+```
+- 方案：字符串去重 根据表名拆分；方便动态读取和解析；方便使用jszip库
+
+
+## 第三版 基于压缩技术
 
 - 方案1：
 ``` 
@@ -104,13 +147,22 @@
 换个思路：每个表头或表内容 都当做一个内部文件  通过zip.file(name).async("string/uint8array")来动态得到解析的内容
 - 格式定义
 ```
-  strings 作为一个文件 放入head中
   head.zip
     count varint
-    [<name:{bodyidx,}>}
-  data1.zip data2.zip strings.zip
+    [<name:{bodyidx,data_off}>}
+
+  data1.zip data2.zip 每个表单独一个string块 用于去重 放到表数据后
+    某一个表的数据  通过data_off来读取这个表的所有内容
+      double_key_count 多列映射数
+       for 
+        key: utf8str
+        id: any 可能是number或字符串 看表的配置 但肯定是第一列
+      row_count 数据行数
+       for 根据head_type写入数据
+        [id, name, ....]
+      string_buffer: 上面用的所有字符串 都在这个块内 通过offset读取utf8string 
+        
   zipFile.file("name").async("nodebuffer");
-  zipFile.file("strings").async("nodebuffer");
 ``` 
 
 

@@ -180,6 +180,7 @@ JSZipTest()
 
 function main() {
     const dbWriter = new DbWriter();
+    // dbWriter.testJsonReadTime();
     dbWriter.jsonToBin();
 
     const dbReader = new DbReader();
