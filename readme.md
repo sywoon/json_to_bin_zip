@@ -72,11 +72,33 @@
 
 
 ## 第二版 将字符串单独存储 降低db大小
+```
+          heads.json data-1.json data2.json
+    原始大小：146k     4.34M      2.5M  总6.99  zip:762K
+    第一版：  24k      1.17M      765K  string.db2.12M 总：4.07M  zip:897K
+```
+
 
 ###  方案
 1. 新增string.db
 2. 出现的字符串全部替换为varint-偏移值
 3. 读取数据时 若head_type为string 则动态从strings.db中解析出字符串
+
+
+
+
+## 第三版 基于压缩技术
+- 方案：
+``` 
+    所有的单个表数据 独立zip压缩  就不用在游戏中加载大的buffer
+    只需在需要时 动态解析出数据内容
+    包含两块数据：head_data body_data
+``` 
+- jszip
+[jszip](https://stuk.github.io/jszip/) 只支持文件级别的压缩和解压；适合对整个db文件压缩
+换个思路：每个表头或表内容 都当做一个内部文件  通过zip.file(name).async("string/uint8array")来动态得到解析的内容
+
+
 
 
 

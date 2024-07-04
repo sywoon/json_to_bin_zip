@@ -2,29 +2,52 @@ const fs = require("fs");
 const Byte = require("./Byte").Byte;
 
 class DbReader {
-    constructor() {}
+    constructor() {
+        this.strByte = new Byte();
+        this.strBuffer = {};
+    }
+
+    getBufferString(offset) {
+        if (this.strBuffer[offset] != null) {
+            return this.strBuffer[offset];
+        }
+        this.strByte.pos = offset;
+        let str = this.strByte.readUTFString();
+        this.strBuffer[offset] = str;
+        return str;
+    }
+
+    getStrFromByte(byte, str) {
+        let offset = byte.readVarInt();
+        return this.getBufferString(offset);
+    }
 
     binToJson() {
-        let buf = this.readDbFile("heads");
-        if (buf == null) {
+        let strByte = this.readDbFile("strings");
+        if (strByte == null)
+            return;
+        this.strByte = strByte;
+
+        let headByte = this.readDbFile("heads");
+        if (headByte == null) {
             return;
         }
 
-        console.log("read heads.db", buf.length);
+        console.log("read heads.db", headByte.length);
         // console.log(buf.toString('hex')); // 输出十六进制字符串
 
-        let headInfo = this.readHead(buf);
+        let headInfo = this.readHead(headByte);
         let tableIdx = 0;
         let bodyInfos = [];
         for (let i = 0; i < headInfo["file_num"]; i++) {
-            let bodyBuf = this.readDbFile(`data${i + 1}`);
-            if (bodyBuf == null) {
+            let dataByte = this.readDbFile(`data${i + 1}`);
+            if (dataByte == null) {
                 console.error("read body file failed", i, `data${i + 1}`);
                 return;
             }
-            console.log(`read data${i + 1}.db`, bodyBuf.length);
+            console.log(`read data${i + 1}.db`, dataByte.length);
             // {version:20240301, bodys:[{name, doubleKey, values}]}
-            let bodyInfo = this.readBody(tableIdx, i, bodyBuf, headInfo);
+            let bodyInfo = this.readBody(tableIdx, i, dataByte, headInfo);
             if (bodyInfo == null) {
                 return;
             }
@@ -37,7 +60,7 @@ class DbReader {
     readDbFile(name) {
         let path = `./data/${name}.db`;
         try {
-            const data = fs.readFileSync(path, null);
+            const data = fs.readFileSync(path, null);  //得到Buffer
             let byte = new Byte(data); // data 是一个 Buffer 对象
             return byte;
         } catch (err) {
@@ -61,6 +84,10 @@ class DbReader {
 
         try {
             fs.mkdirSync("./data2", { recursive: true });
+
+            let pathStrBuffer = `./data2/strings.json`;
+            fs.writeFileSync(pathStrBuffer, JSON.stringify(this.strBuffer, replacer));
+
             let pathHead = `./data2/heads.json`;
             fs.writeFileSync(pathHead, JSON.stringify(headInfo, replacer));
 
@@ -88,7 +115,7 @@ class DbReader {
 
         let tables = [];
         for (let i = 0; i < headInfo["table_num"]; i++) {
-            let name = byte.readUTFString();
+            let name = this.getStrFromByte(byte);
             let headOffset = byte.readVarInt();
             let bodyOffset = byte.readVarInt();
             let dataFileIdx = byte.readUint8();
@@ -103,7 +130,7 @@ class DbReader {
             let columnLen = byte.readUint8();
             let headTitle = [];
             for (let i = 0; i < columnLen; i++) {
-                headTitle.push(byte.readUTFString());
+                headTitle.push(this.getStrFromByte(byte));
             }
             headTitles.push(headTitle);
 
@@ -151,7 +178,7 @@ class DbReader {
             return null;
         }
 
-        let name = byte.readUTFString();
+        let name = this.getStrFromByte(byte);
         if (tableInfo.name != name) {
             console.error("table name error", name, name);
             return null;
@@ -160,7 +187,7 @@ class DbReader {
         let doubleKey = {};
         let doubleKeysNum = byte.readVarInt();
         for (let j = 0; j < doubleKeysNum; j++) {
-            let key = byte.readUTFString();
+            let key = this.getStrFromByte(byte);
             let id = byte.readVarInt();
             doubleKey[key] = id;
         }
@@ -173,9 +200,10 @@ class DbReader {
                 if (headType[k] == 0) {
                     row.push(byte.readVarInt());
                 } else if (headType[k] == 1) {
-                    row.push(byte.readUTFString());
+                    row.push(this.getStrFromByte(byte));
                 } else if (headType[k] == 2) {
-                    row.push(JSON.parse(byte.readUTFString()));
+                    let txt = this.getStrFromByte(byte)
+                    row.push(JSON.parse(txt));
                 } else if (headType[k] == 3) {
                     row.push(byte.readFloat32());
                 } else if (headType[k] == 4) {

@@ -5,6 +5,9 @@ const log = console.log
 const DbReader = require("./DbReader")
 const DbWriter = require("./DbWriter")
 const Logger = require("./Logger")
+const JSZip = require("./libs/jszip");
+const fs = require("fs")
+const JSZipDemo = require("./JSZipDemo")
 
 
 /*
@@ -157,13 +160,26 @@ function TestByte() {
     console.log("---TestByte---end---")
 }
 
-Logger.init()
-console.log("Hello, world!")
-console.warn("Hello, world!")
-console.error("Hello, world!")
+function LogColorTest() {
+    console.log("Hello, world!")
+    console.warn("Hello, world!")
+    console.error("Hello, world!")
+}
 
+function JSZipTest() {
+    let test = new JSZipDemo();
+    test.runTest();
+    return;
+
+    
+}
+
+Logger.init()
 // TestMsgPack()
 // TestByte()
+LogColorTest()
+JSZipTest()
+
 
 function main() {
     const dbWriter = new DbWriter();
@@ -173,5 +189,5 @@ function main() {
     dbReader.binToJson();
 }
 
-main()
+// main()
 

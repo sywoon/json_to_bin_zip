@@ -4,7 +4,25 @@ const Byte = require("./Byte").Byte;
 
 
 class DbWriter {
-    constructor() {}
+    constructor() {
+        this.strByte = new Byte();
+        this.strOffset = {};
+    }
+
+    pushString(str) {
+        if (this.strOffset[str]) {
+            return this.strOffset[str];
+        }
+
+        this.strOffset[str] = this.strByte.pos;
+        this.strByte.writeUTFString(str);
+        return this.strOffset[str];
+    }
+
+    writeStrToByte(byte, str) {
+        let offset = this.pushString(str);
+        byte.writeVarInt(offset);
+    }
 
 
     jsonToBin() {
@@ -28,6 +46,9 @@ class DbWriter {
     saveBin(headByte, bodyBytes) {
         try {
             fs.mkdirSync("./data", { recursive: true });
+            let strPath = `./data/strings.db`;
+            fs.writeFileSync(strPath, Buffer.from(this.strByte.buffer));
+
             let pathHead = `./data/heads.db`;
             fs.writeFileSync(pathHead, Buffer.from(headByte.buffer));
 
@@ -77,7 +98,7 @@ class DbWriter {
     //      for: 列数据
     //        value: 根据head类型0:int 1:string 2:json 3:float 4:any 写入方式不同
     oneTableBodyToBin(byte, name, head, head_type, double_keys, body) {
-        byte.writeUTFString(name); //方便读取时验证
+        this.writeStrToByte(byte, name); //方便读取时验证
 
         if (!double_keys) {
             byte.writeVarInt(0); // double_keys num
@@ -85,7 +106,7 @@ class DbWriter {
             let len = Object.keys(double_keys).length;
             byte.writeVarInt(len);
             for (let key of Object.keys(double_keys)) {
-                byte.writeUTFString(key);
+                this.writeStrToByte(byte, key);
                 byte.writeVarInt(double_keys[key]);
             }
         }
@@ -98,9 +119,10 @@ class DbWriter {
                 if (head_type[k] == 0) {
                     byte.writeVarInt(v);
                 } else if (head_type[k] == 1) {
-                    byte.writeUTFString(v);
+                    this.writeStrToByte(byte, v);
                 } else if (head_type[k] == 2) {
-                    byte.writeUTFString(JSON.stringify(v));
+                    let txt = JSON.stringify(v)
+                    this.writeStrToByte(byte, txt);
                 } else if (head_type[k] == 3) {
                     byte.writeFloat32(v);
                 } else if (head_type[k] == 4) {
@@ -129,7 +151,7 @@ class DbWriter {
             let head_type = heads["heads_type"][i];
             byte.writeUint8(head.length);
             for (let j = 0; j < head.length; j++) {
-                byte.writeUTFString(head[j]);
+                this.writeStrToByte(byte, head[j]);
             }
             for (let j = 0; j < head_type.length; j++) {
                 byte.writeUint8(head_type[j]);
@@ -163,7 +185,7 @@ class DbWriter {
         console.log("write head", dateValue, heads["file_num"], heads["tables"].length, byte.endian)
         for (let i = 0; i < heads["tables"].length; i++) {
             let tableInfo = tablesInfo[i];  //{ headOffset: byte.pos, bodyOffset: byte.pos, tableIdx: tableIdx, dataFileIdx: dataFileIdx, name: name }
-            byte.writeUTFString(tableInfo["name"]);
+            this.writeStrToByte(byte, tableInfo["name"]);
             byte.writeVarInt(tableInfo["headOffset"]); // headdata_off
             byte.writeVarInt(tableInfo["bodyOffset"]); // bodydata_off
             byte.writeUint8(tableInfo["dataFileIdx"]); // dataFile_index
