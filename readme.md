@@ -2,9 +2,9 @@
 # 基于二进制的数据表
 
 ## 分支说明
-version1: 完成json转db 再读取回json
-version2: 新增jszip功能 压缩测试 方案分析；重复字符串测试；读写测试；
-version3: 完成基于jszip的整体实现 简化2中的无用内容
+- version1: 完成json转db 再读取回json
+- version2: 新增jszip功能 压缩测试 方案分析；重复字符串测试；读写测试；
+- version3: 完成基于jszip的整体实现 简化2中的无用内容
 
 
 ## 原始json格式

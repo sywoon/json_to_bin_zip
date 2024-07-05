@@ -70,7 +70,7 @@ class DbWriter {
         this.saveBin(headByte, bodyBytes);
     }
 
-    jsonToBin() {
+    jsonToBin(cbk) {
         let jsonDataAll = this.readJsonData();
 
         let heads = jsonDataAll["heads"];
@@ -83,17 +83,20 @@ class DbWriter {
             tableIdx += bodyData.values.length;
         }
 
-        this.saveBin(tablesInfo);
+        this.saveBin(tablesInfo, cbk);
     }
 
-    saveBin(tablesInfo) {
+    saveBin(tablesInfo, cbk) {
         try {
+            let names = [];
             let zip = new JSZip();
             for (let tableInfo of tablesInfo) {
                 let name = tableInfo["name"];
                 let byteTable = tableInfo["byteTable"];
+                names.push(name);
                 zip.file(name, byteTable.buffer);
             }
+            zip.file("all_names", JSON.stringify(names));
 
             zip.generateAsync({
                 type: "arraybuffer",
@@ -101,8 +104,9 @@ class DbWriter {
                 compressionOptions: {
                     level: 7,  // 压缩等级1~9  1压缩速度最快，9最优压缩方式
                 }
-            }).then(function (buf) {
+            }).then((buf) => {
                 fs.writeFileSync("./data/data.zip", Buffer.from(buf))
+                cbk && cbk();
             });
 
             // let pathHead = `./data/heads.db`;
@@ -189,6 +193,7 @@ class DbWriter {
     //二进制表内容
     // buf_head_len u32
     // buf_body_len u32
+    // buf_string_len u32
     // buf_head
     // buf_body
     // buf_string
@@ -197,7 +202,7 @@ class DbWriter {
         byteHead.writeUTFString(JSON.stringify(tableInfo["head_info"])); //tableInfo
         byteHead.writeUTFString(JSON.stringify(tableInfo["head_title"]));
         byteHead.writeUTFString(JSON.stringify(tableInfo["head_type"]));
-        byteHead.writeUTFString(JSON.stringify(tableInfo["double_keys"]));
+        byteHead.writeUTFString(tableInfo["double_keys"] ? JSON.stringify(tableInfo["double_keys"]) : "null");
         byteHead.writeUTFString(JSON.stringify(tableInfo["ids"]));
 
         let byteBody = tableInfo["data_byte"];
@@ -206,6 +211,7 @@ class DbWriter {
         let byteTable = new Byte();
         byteTable.writeUint32(byteHead.length);
         byteTable.writeUint32(byteBody.length);
+        byteTable.writeUint32(byteStrBlock.length);
         byteTable.writeArrayBuffer(byteHead.buffer);
         byteTable.writeArrayBuffer(byteBody.buffer);
         byteTable.writeArrayBuffer(byteStrBlock.buffer);

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const Byte = require("./Byte").Byte;
+const JSZip = require("./libs/jszip");
 
 class DbReader {
     constructor() {
@@ -24,45 +25,69 @@ class DbReader {
 
     binToJson() {
         let time = Date.now();
-        let strByte = this.readDbFile("strings");
-        if (strByte == null)
-            return;
-        this.strByte = strByte;
+        let zipFile = null;
+        try {
+            let names = [];
+            let zip = new JSZip();
+            let buffer = fs.readFileSync("./data/data.zip");
+            zip.loadAsync(buffer).then((file) => {
+                zipFile = file;
+                zipFile
+                    .file("all_names")
+                    .async("string")
+                    .then((str) => {
+                        names = JSON.parse(str);
+                    });
 
-        let headByte = this.readDbFile("heads");
-        if (headByte == null) {
-            return;
+                zipFile
+                    .file("activity")
+                    .async("arraybuffer")
+                    .then((u8) => {
+                        let byte = new Byte(Buffer.from(u8));
+                        console.log("read zip", byte.length, byte);
+                        let tableInfo = this.parseOneTableDb(byte);
+                    });
+            });
+        } catch (error) {
+            console.error("read zip error", error);
         }
 
-        console.log("read heads.db", headByte.length);
-        // console.log(buf.toString('hex')); // 输出十六进制字符串
+        console.log("read db time", Date.now() - time);
+        // this.saveJson(headInfo, bodyInfos);
+    }
 
-        let headInfo = this.readHead(headByte);
-        let tableIdx = 0;
-        let bodyInfos = [];
-        for (let i = 0; i < headInfo["file_num"]; i++) {
-            let dataByte = this.readDbFile(`data${i + 1}`);
-            if (dataByte == null) {
-                console.error("read body file failed", i, `data${i + 1}`);
-                return;
-            }
-            console.log(`read data${i + 1}.db`, dataByte.length);
-            // {version:20240301, bodys:[{name, doubleKey, values}]}
-            let bodyInfo = this.readBody(tableIdx, i, dataByte, headInfo);
-            if (bodyInfo == null) {
-                return;
-            }
-            tableIdx += bodyInfo["bodys"].length;
-            bodyInfos.push(bodyInfo);
-        }
-        console.log("read db time", Date.now() - time) 
-        this.saveJson(headInfo, bodyInfos);
+    parseOneTableDb(byte) {
+        let headLen = byte.readUint32();
+        let bodyLen = byte.readUint32();
+        let strBlockLen = byte.readUint32();
+        let headBuffer = byte.readArrayBuffer(headLen);
+        let bodyBuffer = byte.readArrayBuffer(bodyLen);
+        let strBlockBuffer = byte.readArrayBuffer(strBlockLen);
+
+        let head = new Byte(headBuffer);
+        let body = new Byte(bodyBuffer);
+        let strBlock = new Byte(strBlockBuffer);
+        let headInfo = head.readUTFString();
+        let headTitle = head.readUTFString();
+        let headType = head.readUTFString();
+        let doubleKeys = head.readUTFString();
+        let ids = head.readUTFString();
+
+        let tableInfo = {};
+        tableInfo["head_info"] = JSON.parse(headInfo);
+        tableInfo["head_title"] = JSON.parse(headTitle);
+        tableInfo["head_type"] = JSON.parse(headType);
+        tableInfo["double_keys"] = JSON.parse(doubleKeys); //可能是'null'
+        tableInfo["ids"] = JSON.parse(ids);
+        tableInfo["data_byte"] = body;
+        tableInfo["string_block"] = strBlock;
+        return tableInfo;
     }
 
     readDbFile(name) {
         let path = `./data/${name}.db`;
         try {
-            const data = fs.readFileSync(path, null);  //得到Buffer
+            const data = fs.readFileSync(path, null); //得到Buffer
             let byte = new Byte(data); // data 是一个 Buffer 对象
             return byte;
         } catch (err) {
@@ -71,14 +96,13 @@ class DbReader {
         }
     }
 
-
-    // headInfo: {version:20240301, file_num:2, table_num:999, tables:[{name,headOffset, bodyOffset}], 
+    // headInfo: {version:20240301, file_num:2, table_num:999, tables:[{name,headOffset, bodyOffset}],
     //  head_titles:["id", "name"], head_types:[0, 1]}
     // bodyInfos: [[version:20240301, bodys:[]]]
     saveJson(headInfo, bodyInfos) {
         function replacer(key, value) {
-            if (typeof value === 'function' || typeof value === 'undefined') {
-                console.error("json.stringify error", key, value)
+            if (typeof value === "function" || typeof value === "undefined") {
+                console.error("json.stringify error", key, value);
                 return null;
             }
             return value;
@@ -96,7 +120,7 @@ class DbReader {
             for (let i = 0; i < bodyInfos.length; i++) {
                 let pathBody = `./data2/data${i + 1}.json`;
                 try {
-                    let txt = JSON.stringify(bodyInfos[i], replacer)
+                    let txt = JSON.stringify(bodyInfos[i], replacer);
                     fs.writeFileSync(pathBody, txt);
                 } catch (err) {
                     console.error("save body file failed", pathBody, err);
@@ -107,7 +131,7 @@ class DbReader {
         }
     }
 
-    // {version:20240301, file_num:2, table_num:999, tables:[{name, headOffset, bodyOffset, dataFileIdx}], 
+    // {version:20240301, file_num:2, table_num:999, tables:[{name, headOffset, bodyOffset, dataFileIdx}],
     //  head_titles:["id", "name"], head_types:[0, 1]}
     readHead(byte) {
         let headInfo = {};
@@ -165,7 +189,7 @@ class DbReader {
             let body = this.readOneTableBody(byte, tableInfo, head, headType);
             if (body == null) {
                 console.error("readOneTableBody failed", tableInfo, head, headType);
-                break
+                break;
             }
             bodys.push(body);
         }
@@ -204,7 +228,7 @@ class DbReader {
                 } else if (headType[k] == 1) {
                     row.push(this.getStrFromByte(byte));
                 } else if (headType[k] == 2) {
-                    let txt = this.getStrFromByte(byte)
+                    let txt = this.getStrFromByte(byte);
                     row.push(JSON.parse(txt));
                 } else if (headType[k] == 3) {
                     row.push(byte.readFloat32());
@@ -219,9 +243,9 @@ class DbReader {
 
         let body = { name: name, values: values };
         if (doubleKeysNum > 0) {
-            body["doubleKey"] = doubleKey
+            body["doubleKey"] = doubleKey;
         }
-        return body
+        return body;
     }
 }
 

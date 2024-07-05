@@ -250,10 +250,11 @@ LogColorTest()
 
 function main() {
     const dbWriter = new DbWriter();
-    dbWriter.jsonToBin();
+    dbWriter.jsonToBin(()=>{
+        const dbReader = new DbReader();
+        dbReader.binToJson();
+    });
 
-    const dbReader = new DbReader();
-    // dbReader.binToJson();
 }
 
 main()
