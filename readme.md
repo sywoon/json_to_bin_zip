@@ -101,6 +101,45 @@ version3: 完成基于jszip的整体实现 简化2中的无用内容
 ```
 
 
+### 纯粹json和db数据对比
+测试head head_type有没必要转二进制
+``` 
+      大小  写入输入  读取+解析
+  json:180k  2ms    0ms
+  db: 146k   11ms  23ms
+```
+-结论：除了大一点，若整体保存和解析，则json完胜
+- db的使用场合：需要动态解析时，保持内存一块很小的部分，再根据需要解析出具体某部分数据
+
+
+### 字符串保存用db方式会变大还是变小
+```
+  str = "hello世界".repeat(1000);
+  原始txt 11000字节
+  writeutf8str 11002字节
+  解释：
+    二进制方式多了一个int16的长度
+    原始txt方式 估计是一直到文件结尾 所以少2字节
+
+  "hello世界123456789"
+  json:20bit
+  db:17bit
+  分析：字符串部分 db多2字节 
+    数字部分 db 4字节 原始：9字节  少5字节
+    所以总db少3字节
+
+  str = "hello世界123456789".repeat(100);
+  byte.writeInt32(123456789)
+  原始txt 2000字节
+  writeutf8str writeInt32 1502字节
+  分析：
+   123456789 字符串方式 9字节； int32：4字节
+   5*100-2 = 498
+ 
+  结论：只要字符串长度超过8字节 就能省内存；反之，原始串更小
+```
+
+
 ### string重复分析
 有多少重复的字符串？
 重复的部分有多少是夸文件的？
@@ -151,7 +190,7 @@ version3: 完成基于jszip的整体实现 简化2中的无用内容
 - jszip
 [jszip](https://stuk.github.io/jszip/) 只支持文件级别的压缩和解压；适合对整个db文件压缩
 换个思路：每个表头或表内容 都当做一个内部文件  通过zip.file(name).async("string/uint8array")来动态得到解析的内容
-- 格式定义
+- 格式定义1
 ```
   head.zip
     count varint
@@ -170,11 +209,68 @@ version3: 完成基于jszip的整体实现 简化2中的无用内容
         
   zipFile.file("name").async("nodebuffer");
 ``` 
+- 再次优化double_key: 没有采用二进制解析的必要，已经走了zip，所以真快使用json字符串
+- data部分：本身就想只解析某一条，像skill类大表就没必要全部解析到json内存中，所以通过二进制方式存储
+- 格式定义2
+```
+  heads.zip
+    count varint
+    [<name:{bodyidx, body_off, data_off, str_off}>}
+
+  data1.zip data2.zip 每个表单独一个string块 用于去重 放到表数据后
+    某一个表的数据  通过data_off来读取这个表的所有内容
+    :body_off
+      head: 表头名称 ["id", "name", "title", ...]  json string
+      head_type: 表头类型 [number, string, ...] json string
+      row_count 数据行数  varint 
+      data_line_size 单行大小  varint
+      ids:[id1,id2] json string  id=>行索引*行大小=偏移=>读取这个表的某一行数据
+      double_key: utf8string  可能是空字符串 若没有映射表
+       for 根据head_type写入数据  :data_off
+        [id, name, ....]
+      string_buffer: 上面用的所有字符串 都在这个块内 通过offset读取utf8string  :str_off
+        
+  zipFile.file("heads").async("nodebuffer");
+``` 
+- 再次优化double_key: 没有采用二进制解析的必要，已经走了zip，所以真快使用json字符串
+- 根据整体压缩效果900k以内 所以不再区分多个data文件 所有文件都在一个压缩包中
+- 省去head 也放入table中
+- 格式定义3
+```
+  data.db
+    table1  全部以单独的表压缩保存
+    table2
+    ...
+
+  table 每个表单独一个string块 用于去重 放到表数据后
+    某一个表的数据  通过data_off来读取这个表的所有内容
+      head: 表头通用信息 {row_count, line_data_size, data_off, strblock_off}  json string
+        row_count 数据行数  
+        data_line_size 单行大小
+      head_title: 表头名称 ["id", "name", "title", ...]  json string
+      head_type: 表头类型 [number, string, ...] json string
+      ids:[id1,id2] json string  id=>行索引*行大小=偏移=>读取这个表的某一行数据
+      double_key: json string 可能是null 若没有映射表
+    :data_off  数据块起始
+       for 根据head_type写入数据
+        [id, name, ....]
+    :strblock_off
+      string_buffer: 上面用的所有字符串 都在这个块内 通过offset读取utf8string
+        
+  zipFile.file("heads").async("nodebuffer");
+``` 
+- 测试结果
+```
+  data.zip 
+  压缩等级9: 1.26M
+  压缩等级1: 1.39M
+```
+
 
 
 
 ## 第四版 模拟项目运行时状态 根据表名动态读取head_data body_data
-- 方案1
+- 方案
 ``` 
   由于jszip按文件目录压缩 第二版中的按照偏移方案来解析 
   数据结构重新设计 全部按表名映射：head head_type double_key body_data
@@ -192,6 +288,3 @@ version3: 完成基于jszip的整体实现 简化2中的无用内容
        单行模式 id=>line 读取方式类似上面
        整个表遍历 则一次解析出所有的内容 直接跳到数据块部分
 ``` 
-
-
-

@@ -171,20 +171,89 @@ function JSZipTest() {
     test.runTest();
 }
 
+
+// 测试某个字符串用db方式保存的大小
+function TestStringDbSize() {
+    let count = 100
+    let str = "hello世界123456789".repeat(count);
+    fs.writeFileSync("test1.txt", str);
+
+    let str2 = "hello世界".repeat(count);
+    let byte = new Byte();
+    byte.writeUTFString(str2)
+    for (let i = 0; i < count; i++) {
+        byte.writeInt32(123456789)
+    }
+    console.log("db size", byte.length)
+    fs.writeFileSync("test1.db", Buffer.from(byte.buffer))
+}
+
+//对比json数据和db数据 哪个更小 读取速度
+function TestJsonDbSize() {
+    let head = ["id","name","skillName","godId","quality","maxLv","avatar","modelBattle","isUpgrade","consume","baseAttr","lvUpArr","icon","tips_show","timeShow"]
+    let head_type = [0,0,1,1,2,0,2,0,0,0,0,2,2,0,2,2,0]
+    for (let i = 0; i < 10; i++) {
+        head = head.concat(head)
+        head_type = head_type.concat(head_type)
+    }
+
+    {
+        //json
+        let t = Date.now()
+        fs.writeFileSync("test.json", JSON.stringify({head:head, head_type:head_type}))
+        console.log("write test.json time", Date.now() - t)
+
+        //db
+        t = Date.now()
+        let count = head.length;
+        let byte = new Byte();
+        byte.writeVarInt(count)
+        for (let i = 0; i < count; i++) {
+            byte.writeUTFString(head[i])
+            byte.writeUint8(head_type[i])
+        }
+        fs.writeFileSync("test.db", Buffer.from(byte.buffer))
+        console.log("write test.db time", Date.now() - t)
+    }
+
+    {
+        //json
+        let t = Date.now()
+        let json = fs.readFileSync("test.json")
+        console.log("read test.json time", Date.now() - t)
+
+        //db
+        t = Date.now()
+        let data = fs.readFileSync("test.db", null)
+        let byte = new Byte(data); 
+        let count = byte.readVarInt()
+        let head = []
+        let head_type = []
+        for (let i = 0; i < count; i++) {
+            head.push(byte.readUTFString())
+            head_type.push(byte.readUint8())
+        }
+        console.log("read test.db time", Date.now() - t)
+    }
+
+}
+
+
 Logger.init()
 // TestMsgPack()
 // TestByte()
 LogColorTest()
-JSZipTest()
+// TestStringDbSize()
+// TestJsonDbSize()
+// JSZipTest()
 
 
 function main() {
     const dbWriter = new DbWriter();
-    // dbWriter.testJsonReadTime();
     dbWriter.jsonToBin();
 
     const dbReader = new DbReader();
-    dbReader.binToJson();
+    // dbReader.binToJson();
 }
 
 main()
