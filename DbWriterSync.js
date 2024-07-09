@@ -79,7 +79,6 @@ class DbWriterSync {
             }
             zip.file("all_names", JSON.stringify(names));
 
-            content = zip.generate({ type: "uint8array" });
             let content = zip.generate({
                 type: "arraybuffer",
                 compression: "DEFLATE",
@@ -87,7 +86,7 @@ class DbWriterSync {
                     level: 7,  // 压缩等级1~9  1压缩速度最快，9最优压缩方式
                 }
             });
-            fs.writeFileSync("./data/data.zip", content)
+            fs.writeFileSync("./data/data.zip", Buffer.from(content))
         } catch (err) {
             console.error("save bin file failed", err);
         }
