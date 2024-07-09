@@ -262,9 +262,18 @@
 - 测试结果
 ```
   data.zip 
-  压缩等级9: 1.26M
+  压缩等级9: 1.26M  带names表
   压缩等级1: 1.39M
+
+  时间：
+  read json:86ms
+  read .zip+load bufer 14ms
+  read one table:5ms
+  parse one line:1ms
 ```
+- 遗留问题：
+读表函数是异步的 无法和业务协调使用
+解决：使用早期的jszip库2.6.1 使用同步方式读写
 
 
 

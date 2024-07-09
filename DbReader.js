@@ -4,64 +4,131 @@ const JSZip = require("./libs/jszip");
 
 class DbReader {
     constructor() {
-        this.strByte = new Byte();
         this.strBuffer = {};
+        this.zipFile = null;
+        this.tableCache = {};
     }
 
-    getBufferString(offset) {
+    getBufferString(offset, strByte) {
         if (this.strBuffer[offset] != null) {
             return this.strBuffer[offset];
         }
-        this.strByte.pos = offset;
-        let str = this.strByte.readUTFString();
+        strByte.pos = offset;
+        let str = strByte.readUTFString();
         this.strBuffer[offset] = str;
         return str;
     }
 
-    getStrFromByte(byte, str) {
+    getStrFromByte(byte, strByte) {
         let offset = byte.readVarInt();
-        return this.getBufferString(offset);
+        return this.getBufferString(offset, strByte);
     }
 
     binToJson() {
         let time = Date.now();
-        let zipFile = null;
         try {
             let names = [];
             let zip = new JSZip();
             let buffer = fs.readFileSync("./data/data.zip");
-            zip.loadAsync(buffer).then((file) => {
-                zipFile = file;
+            zip.loadAsync(buffer).then((zipFile) => {
+                console.log("load zip time", Date.now() - time);
+                time = Date.now();
+
+                this.zipFile = zipFile;
                 zipFile
                     .file("all_names")
                     .async("string")
                     .then((str) => {
                         names = JSON.parse(str);
+                        console.log("load names time", Date.now() - time);
                     });
 
-                zipFile
-                    .file("activity")
-                    .async("arraybuffer")
-                    .then((u8) => {
-                        let byte = new Byte(Buffer.from(u8));
-                        console.log("read zip", byte.length, byte);
-                        let tableInfo = this.parseOneTableDb(byte);
-                    });
+                this.unzipOneTable("activity", (tableInfo)=>{
+                    let info = this.getDbById("activity", 1);
+                })
             });
         } catch (error) {
             console.error("read zip error", error);
         }
 
-        console.log("read db time", Date.now() - time);
         // this.saveJson(headInfo, bodyInfos);
     }
 
+    unzipOneTable(name, cbk) {
+        let time = Date.now();
+        this.zipFile
+        .file(name)
+        .async("arraybuffer")
+        .then((u8) => {
+            let byte = new Byte(Buffer.from(u8));
+            let tableInfo = this.parseOneTableDb(byte);
+            this.tableCache[name] = tableInfo;
+            console.log("unzip one table time", name, Date.now() - time);
+            cbk && cbk(tableInfo);
+        });
+    }
+
+    //这里的实现有问题 由于jszip库是异步的 导致获取数据时不能立刻返回
+    //解决：使用早期的2.6.1的同步版本 需要测试下性能
+    getDbById(name, id) {
+        let parseDbCall = null;
+        if (this.tableCache[name]) {
+            this.unzipOneTable(name, (tableInfo)=>{
+                let line = this.readLineById(name, id);
+                console.log("line", line);
+            })
+            return null;
+        } else {
+            let line = this.readLineById(name, id);
+                console.log("line2", line);
+            return line;
+        }
+    }
+
+    readLineById(name, id) {
+        let time = Date.now();
+        let tableInfo = this.tableCache[name];
+        if (!tableInfo) {
+            console.error("readLineById error", name, id);
+            return null;
+        }
+
+        let ids = tableInfo["ids"];
+        let offset = ids[id];
+        let dataByte = tableInfo["data_byte"];
+        let strBlock = tableInfo["string_block"];
+
+        dataByte.pos = offset;
+        let row = {};
+        for (let i = 0; i < tableInfo["head_title"].length; i++) {
+            let type = tableInfo["head_type"][i];
+            let value = null;
+            if (type == 0) {
+                value = dataByte.readVarInt();
+            } else if (type == 1) {
+                value = this.getStrFromByte(dataByte, strBlock);
+            } else if (type == 2) {
+                let txt = this.getStrFromByte(dataByte, strBlock);
+                value = JSON.parse(txt);
+            } else if (type == 3) {
+                value = dataByte.readFloat32();
+            } else if (type == 4) {
+                value = dataByte.readAny();
+            } else {
+                console.error("readOneTableBody error", name, type);
+            }
+            row[tableInfo["head_title"][i]] = value; 
+        }
+        console.log("read line time:", name, Date.now() - time);
+        return row;
+    }
+
     parseOneTableDb(byte) {
-        let headLen = byte.readUint32();
-        let bodyLen = byte.readUint32();
+        let headSize = byte.readUint32();
+        let bodySize = byte.readUint32();
         let strBlockLen = byte.readUint32();
-        let headBuffer = byte.readArrayBuffer(headLen);
-        let bodyBuffer = byte.readArrayBuffer(bodyLen);
+        let headBuffer = byte.readArrayBuffer(headSize);
+        let bodyBuffer = byte.readArrayBuffer(bodySize);
         let strBlockBuffer = byte.readArrayBuffer(strBlockLen);
 
         let head = new Byte(headBuffer);
