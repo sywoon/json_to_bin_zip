@@ -10,7 +10,7 @@ class DbReader {
     }
 
     getBufferString(offset, strByte) {
-        if (this.strBuffer[offset] != null) {
+        if (this.strBuffer[offset] != null) { //可以优化 只在读取某个表过程中才保存
             return this.strBuffer[offset];
         }
         strByte.pos = offset;
@@ -76,11 +76,15 @@ class DbReader {
             this.unzipOneTable(name, (tableInfo)=>{
                 let line = this.readLineById(name, id);
                 console.log("line", line);
+                let lines = this.readDbAll(name);
+                console.log("lines", lines);
             })
             return null;
         } else {
             let line = this.readLineById(name, id);
-                console.log("line2", line);
+            console.log("line2", line);
+            let lines = this.readDbAll(name);
+            console.log("lines2", lines);
             return line;
         }
     }
@@ -121,6 +125,24 @@ class DbReader {
         }
         console.log("read line time:", name, Date.now() - time);
         return row;
+    }
+
+    readDbAll(name) {
+        let time = Date.now();
+        let tableInfo = this.tableCache[name];
+        if (!tableInfo) {
+            console.error("readDbAll error", name, id);
+            return null;
+        }
+
+        let ids = tableInfo["ids"];
+        let lines = {};
+        for (let id in ids) {
+            let row = this.readLineById(name, id);
+            lines[id] = row;
+        }
+        console.log("read db all time:", name, Date.now() - time);
+        return lines;
     }
 
     parseOneTableDb(byte) {

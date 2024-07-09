@@ -270,6 +270,7 @@
   read .zip+load bufer 14ms
   read one table:5ms
   parse one line:1ms
+  parse all db: 6ms
 ```
 - 遗留问题：
 读表函数是异步的 无法和业务协调使用
