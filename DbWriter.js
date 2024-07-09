@@ -1,7 +1,7 @@
 const { assert } = require("console");
 const fs = require("fs");
 const Byte = require("./Byte").Byte;
-const JSZip = require("./libs/jszip");
+const JSZipAsync = require("./libs/jszip_async");
 
 class StringBlock {
     constructor() {
@@ -89,7 +89,7 @@ class DbWriter {
     saveBin(tablesInfo, cbk) {
         try {
             let names = [];
-            let zip = new JSZip();
+            let zip = new JSZipAsync();
             for (let tableInfo of tablesInfo) {
                 let name = tableInfo["name"];
                 let byteTable = tableInfo["byteTable"];

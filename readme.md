@@ -7,6 +7,47 @@
 - version3: 完成基于jszip的整体实现 简化2中的无用内容
 
 
+## Buffer ArrayBuffer ArrayUint8
+
+- Buffer
+Node.js中特有 处理二进制数据流 
+```
+  Buffer.alloc(9)
+  Buffer.from([1,3,4])
+  Buffer.from("hello", "utf8")
+```
+
+- ArrayBuffer
+- es6标准 二进制数据缓冲区 本身不提供读写方法 需要通过类型化数组-Uint8Array之类 DateView
+```
+  new ArrayBuffer(10)  10字节大小
+```
+
+- Uint8Array
+一种类型化数组视图 初始化为0 
+```
+  new Uint8Array(9)
+  new Uint8Array([1,3,4])
+  new Uint8Array(arraybuffer)
+```
+
+- 互转
+```
+  Buffer => ArrayBuffer Uint8Array
+  buf = Buffer.from([1,3])
+  arrBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset+buf.byteLength)
+  u8arr = new Uint8Array(buf)
+  
+  ArrayBuffer Uint8Array => Buffer
+  ab = new ArrayBuffer(4)
+  u8arr = new Uint8Array(ab)
+  buf = Buffer.from(ab)
+  buf = Buffer.from(u8arr)
+```
+
+
+
+
 ## 原始json格式
 - heads.json  表头信息：所有表名、表头、表头类型、双键映射(多列映射为id)、总表数
 ```json
@@ -25,7 +66,7 @@
      ]
      "file_num":2  有几个data文件 浏览器限制了5M的大小 超过后不缓存 每次都下载  小游戏是否也会?
 ```
-    
+
 - data-1.json data2.json
 ```json
       values:[
@@ -186,7 +227,7 @@
     所有的单个表数据 独立zip压缩  就不用在游戏中加载大的buffer
     只需在需要时 动态解析出数据内容
     包含两块数据：head_data body_data
-``` 
+```
 - jszip
 [jszip](https://stuk.github.io/jszip/) 只支持文件级别的压缩和解压；适合对整个db文件压缩
 换个思路：每个表头或表内容 都当做一个内部文件  通过zip.file(name).async("string/uint8array")来动态得到解析的内容
@@ -208,7 +249,7 @@
       string_buffer: 上面用的所有字符串 都在这个块内 通过offset读取utf8string 
         
   zipFile.file("name").async("nodebuffer");
-``` 
+```
 - 再次优化double_key: 没有采用二进制解析的必要，已经走了zip，所以真快使用json字符串
 - data部分：本身就想只解析某一条，像skill类大表就没必要全部解析到json内存中，所以通过二进制方式存储
 - 格式定义2
@@ -231,7 +272,7 @@
       string_buffer: 上面用的所有字符串 都在这个块内 通过offset读取utf8string  :str_off
         
   zipFile.file("heads").async("nodebuffer");
-``` 
+```
 - 再次优化double_key: 没有采用二进制解析的必要，已经走了zip，所以真快使用json字符串
 - 根据整体压缩效果900k以内 所以不再区分多个data文件 所有文件都在一个压缩包中
 - 省去head 也放入table中
@@ -258,7 +299,7 @@
       string_buffer: 上面用的所有字符串 都在这个块内 通过offset读取utf8string
         
   zipFile.file("heads").async("nodebuffer");
-``` 
+```
 - 测试结果
 ```
   data.zip 
@@ -280,21 +321,31 @@
 
 
 ## 第四版 模拟项目运行时状态 根据表名动态读取head_data body_data
+使用同步库2.6.1版本 整理第三版代码 删除无关函数 
+整理实现接口:方便使用和查看内存情况
+开发模式多names表 用开关控制
 - 方案
 ``` 
   由于jszip按文件目录压缩 第二版中的按照偏移方案来解析 
   数据结构重新设计 全部按表名映射：head head_type double_key body_data
   怎样只解析某一行数据 而非整个表？
-  第一层解析：jszip中安表明生成一个buffer文件 解析出缓存
-    name:{buffer}
-  第二层解析： 由于所有的string都用偏移代替 所以每行占的二进制大小相同
-    {buffer, doublekey, data:{id:line}, allunziped:true}  判断是否全部解析 且可以丢弃buffer对象
-    headinfo: [head][head_type] double_off body_off [doublekey_data] [body_data]
-    doublekey_data: map_count block_size key_array[key1,key2] {<key:value>, <string:id>}
-        key=>id
-        map中kv对数量 单个ky块的大小-用于计算偏移 所有key的数组-从小到大排序-
-        使用时快排定位，得到第几个索引+块偏移 得到具体的buffer offset 再读取这块数据
-    body_data line_count line_size id_array[id1,id2,...] [[line1], [id,name,level,...]]
-       单行模式 id=>line 读取方式类似上面
-       整个表遍历 则一次解析出所有的内容 直接跳到数据块部分
-``` 
+  第一层解析：
+    通过fs/http加载.zip文件 得到arraybuffer
+    jszip加载这个buffer 等待解析
+  第二层解析：
+    根据表明解析表相关信息
+    jszip.file(name).async("arraybuffer").then(u8)
+    byte = new Byte(Buffer.from(u8))
+    解析表头：
+    head_info: {row_count, name}
+    head_title: ["id", "name", ...]
+    head_type: [0, 1, ...]
+    double_keys: {key:id, 11_0:1} 多列合并值到id的映射
+    ids id在body_byte中的偏移 {1:0, 2:8} id到具体行数据的偏移 
+    data_byte: Byte
+    string_block:Byte
+  第三层解析：动态解析数据
+    若通过id方式获取数据 就只解析这一行的数据
+    若getArray方式 一次更加ids 解析出所有内容
+    head_title head_type ids => {id:{id:1,name:"",...}}
+```

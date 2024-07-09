@@ -1,13 +1,13 @@
-const JSZip = require("./libs/jszip");
+const JSZipAsync = require("./libs/jszip_async");
 const fs = require("fs");
 
-class JSZipDemo {
+class JSZipAsyncDemo {
     constructor() {
-        console.log("JSZipDemo constructor", JSZip);
+        console.log("JSZipDemo constructor", JSZipAsync);
     }
 
     async createZip() {
-        let zip = new JSZip();
+        let zip = new JSZipAsync();
         zip.file("Hello.txt", "Hello World\n");
         let content = await zip.generateAsync({ type: "nodebuffer" });
         console.log("nodebuffer", typeof content, content.length, content);
@@ -15,11 +15,11 @@ class JSZipDemo {
     }
 
     async extractZip(zipContent) {
-        let zip = new JSZip();
+        let zip = new JSZipAsync();
         let zipFile = await zip.loadAsync(zipContent);
         let content = await zipFile.file("Hello.txt").async("string");
 
-        if (JSZip.support.uint8array) {
+        if (JSZipAsync.support.uint8array) {
             zip.file("Hello.txt")
                 .async("uint8array")
                 .then(function (data) {
@@ -37,7 +37,7 @@ class JSZipDemo {
     }
 
     async writeZip() {
-        let zip = new JSZip();
+        let zip = new JSZipAsync();
         // create a file
         zip.file("hello2.txt", "Hello[p my)6cxsw2q");
         // oops, cat on keyboard. Fixing !
@@ -65,7 +65,7 @@ class JSZipDemo {
     }
 
     async readZip() {
-        let zip = new JSZip();
+        let zip = new JSZipAsync();
         let buffer = await fs.readFileSync("hello.zip");
         let zipFile = await zip.loadAsync(buffer);
         let content = await zipFile.file("hello2.txt").async("string");
@@ -84,4 +84,4 @@ class JSZipDemo {
 }
 
 // module.exports.JSZipDemo = JSZipDemo;  //const { JSZipDemo } = require("./JSZipDemo")
-module.exports = JSZipDemo; //const JSZipDemo = require("./JSZipDemo")
+module.exports = JSZipAsyncDemo; //const JSZipDemo = require("./JSZipDemo")

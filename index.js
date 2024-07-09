@@ -5,9 +5,9 @@ const log = console.log
 const DbReader = require("./DbReader")
 const DbWriter = require("./DbWriter")
 const Logger = require("./Logger")
-const JSZip = require("./libs/jszip");
 const fs = require("fs")
-const JSZipDemo = require("./JSZipDemo")
+const JSZipAsyncDemo = require("./JSZipAsyncDemo")
+const JSZipSyncDemo = require("./JSZipSyncDemo")
 
 
 /*
@@ -166,8 +166,13 @@ function LogColorTest() {
     console.error("Hello, world!")
 }
 
-function JSZipTest() {
-    let test = new JSZipDemo();
+function JSZipAsyncTest() {
+    let test = new JSZipAsyncDemo();
+    test.runTest();
+}
+
+function JSZipSyncTest() {
+    let test = new JSZipSyncDemo();
     test.runTest();
 }
 
@@ -246,6 +251,8 @@ LogColorTest()
 // TestStringDbSize()
 // TestJsonDbSize()
 // JSZipTest()
+// JSZipAsyncTest()
+JSZipSyncTest()
 
 
 function main() {
@@ -257,6 +264,5 @@ function main() {
 
 }
 
-
-main()
+// main()
 

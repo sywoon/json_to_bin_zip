@@ -1,6 +1,6 @@
 const fs = require("fs");
 const Byte = require("./Byte").Byte;
-const JSZip = require("./libs/jszip");
+const JSZipAsync = require("./libs/jszip_async");
 
 class DbReader {
     constructor() {
@@ -28,7 +28,7 @@ class DbReader {
         let time = Date.now();
         try {
             let names = [];
-            let zip = new JSZip();
+            let zip = new JSZipAsync();
             let buffer = fs.readFileSync("./data/data.zip");
             zip.loadAsync(buffer).then((zipFile) => {
                 console.log("load zip time", Date.now() - time);
