@@ -31,7 +31,7 @@ class StringBlock {
     }
 }
 
-class DbWriter {
+class DbWriterAsync {
     constructor() {
         this.strByte = new Byte();
         this.strOffset = {};
@@ -231,7 +231,7 @@ class DbWriter {
     }
 }
 
-module.exports = DbWriter;
+module.exports = DbWriterAsync;
 
 //参考1：某个表的格式
 //  |--------|

@@ -311,7 +311,7 @@ Node.js中特有 处理二进制数据流
   read .zip+load bufer 14ms
   read one table:5ms
   parse one line:1ms
-  parse all db: 6ms
+  parse all db: 6ms  都是打log的时间 去除后 1ms
 ```
 - 遗留问题：
 读表函数是异步的 无法和业务协调使用
@@ -349,3 +349,29 @@ Node.js中特有 处理二进制数据流
     若getArray方式 一次更加ids 解析出所有内容
     head_title head_type ids => {id:{id:1,name:"",...}}
 ```
+
+- 测试结果
+```
+  read json:86ms
+  read .zip+load bufer 86ms 比异步的慢很多 估计是一次解析了所有文件
+  read one table:3ms  这个变快了 正常：表文件先解析了一部分
+  parse one line:0ms  
+  parse all db: 1ms
+```
+- 结论：
+1. 除了下载+加载需要一点时间  动态读取的速度很快 
+2. 可以不用做缓存了 
+
+
+
+
+
+
+
+
+
+
+
+
+
+

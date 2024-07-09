@@ -2,8 +2,10 @@ const Byte = require ("./Byte").Byte
 const msgpack5 = require("msgpack5")
 const bl = require('bl')
 const log = console.log
-const DbReader = require("./DbReader")
-const DbWriter = require("./DbWriter")
+const DbReaderAsync = require("./DbReaderAsync")
+const DbWriterAsync = require("./DbWriterAsync")
+const DbReaderSync = require("./DbReaderSync")
+const DbWriterSync = require("./DbWriterSync")
 const Logger = require("./Logger")
 const fs = require("fs")
 const JSZipAsyncDemo = require("./JSZipAsyncDemo")
@@ -252,17 +254,26 @@ LogColorTest()
 // TestJsonDbSize()
 // JSZipTest()
 // JSZipAsyncTest()
-JSZipSyncTest()
+// JSZipSyncTest()
 
 
 function main() {
-    const dbWriter = new DbWriter();
-    dbWriter.jsonToBin(()=>{
-        const dbReader = new DbReader();
-        dbReader.binToJson();
-    });
+    if (false) {
+        const dbWriter = new DbWriterAsync();
+        dbWriter.jsonToBin(()=>{
+            const dbReader = new DbReaderAsync();
+            dbReader.binToJson();
+        });
+    }
 
+    if (true) {
+        const dbWriter = new DbWriterSync();
+        dbWriter.jsonToBin()
+        const dbReader = new DbReaderSync();
+        dbReader.binToJson();
+
+    }
 }
 
-// main()
+main()
 

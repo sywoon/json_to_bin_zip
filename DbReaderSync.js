@@ -1,8 +1,9 @@
 const fs = require("fs");
 const Byte = require("./Byte").Byte;
-const JSZipAsync = require("./libs/jszip_async");
+const JSZipSync = require("./libs/jszip_sync");
+const { table } = require("console");
 
-class DbReader {
+class DbReaderSync {
     constructor() {
         this.strBuffer = {};
         this.zipFile = null;
@@ -28,69 +29,57 @@ class DbReader {
         let time = Date.now();
         try {
             let names = [];
-            let zip = new JSZipAsync();
+            let zip = new JSZipSync();
             let buffer = fs.readFileSync("./data/data.zip");
-            zip.loadAsync(buffer).then((zipFile) => {
-                console.log("load zip time", Date.now() - time);
-                time = Date.now();
+            let zipFile = zip.load(buffer);
+            console.log("load zip time", Date.now() - time);
+            time = Date.now();
 
-                this.zipFile = zipFile;
-                zipFile
-                    .file("all_names")
-                    .async("string")
-                    .then((str) => {
-                        names = JSON.parse(str);
-                        console.log("load names time", Date.now() - time);
-                    });
+            this.zipFile = zipFile;
+            {
+                let str = zipFile.file("all_names").asText()
+                names = JSON.parse(str);
+                console.log("load names time", Date.now() - time);
+            }
 
-                this.unzipOneTable("activity", (tableInfo)=>{
-                    let info = this.getDbById("activity", 1);
-                })
-            });
-        } catch (error) {
-            console.error("read zip error", error);
+            let tableInfo = this.unzipOneTable("activity");
+            let info = this.getDbById("activity", 1);
+        } catch (err) {
+            console.error("binToJson error", err);
         }
-
         // this.saveJson(headInfo, bodyInfos);
     }
 
-    unzipOneTable(name, cbk) {
+    unzipOneTable(name) {
         let time = Date.now();
-        this.zipFile
-        .file(name)
-        .async("arraybuffer")
-        .then((u8) => {
-            let byte = new Byte(Buffer.from(u8));
-            let tableInfo = this.parseOneTableDb(byte);
-            this.tableCache[name] = tableInfo;
-            console.log("unzip one table time", name, Date.now() - time);
-            cbk && cbk(tableInfo);
-        });
+        let u8 = this.zipFile.file(name).asArrayBuffer();
+        let byte = new Byte(Buffer.from(u8));
+
+        let tableInfo = this.parseOneTableDb(byte);
+        this.tableCache[name] = tableInfo;
+
+        console.log("unzip one table time", name, Date.now() - time);
+        return tableInfo
     }
 
     //这里的实现有问题 由于jszip库是异步的 导致获取数据时不能立刻返回
     //解决：使用早期的2.6.1的同步版本 需要测试下性能
     getDbById(name, id) {
-        let parseDbCall = null;
-        if (this.tableCache[name]) {
-            this.unzipOneTable(name, (tableInfo)=>{
-                let line = this.readLineById(name, id);
-                console.log("line", line);
-                let lines = this.readDbAll(name);
-                console.log("lines", lines);
-            })
-            return null;
-        } else {
-            let line = this.readLineById(name, id);
-            console.log("line2", line);
-            let lines = this.readDbAll(name);
-            console.log("lines2", lines);
-            return line;
+        let tableInfo = this.tableCache[name]
+        if (!tableInfo) {
+            tableInfo = this.unzipOneTable(name);
         }
+
+        let line = this.readLineById(name, id);
+        console.log("line", line);
+
+        let lines = this.readDbAll(name);
+        console.log("lines all", Object.keys(lines));
+        return line;
     }
 
     readLineById(name, id) {
-        let time = Date.now();
+        // let time = Date.now();
         let tableInfo = this.tableCache[name];
         if (!tableInfo) {
             console.error("readLineById error", name, id);
@@ -123,7 +112,7 @@ class DbReader {
             }
             row[tableInfo["head_title"][i]] = value; 
         }
-        console.log("read line time:", name, Date.now() - time);
+        // console.log("read line time:", name, Date.now() - time);
         return row;
     }
 
@@ -338,4 +327,4 @@ class DbReader {
     }
 }
 
-module.exports = DbReader;
+module.exports = DbReaderSync;
