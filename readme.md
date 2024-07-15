@@ -372,11 +372,87 @@ Node.js中特有 处理二进制数据流
 
 
 
+## 第五版
+- 之前版本遇到的问题：
+1. 对excel表头有严格要求 尤其float类型 json不能混用 需要用any等
+2. 对excel的单元格格式有要求 尤其看着是数字 导出变成了字符串 需要到表里点击修复为数字
+3. float的打包和解包不精准 默认DateView.setFloat32 getFloat32有精度问题；msgpack5的库倒是没这个问题
+4. 语言包问题：现在字符串全部压缩在单表内，怎么翻译？怎么支持多语言？
+  1. 原方式：提取所有表的中文，翻译为目标语言-单独保存语言文件ko_excel.json 
+  ```
+    excel_head_lang.json "activity": ["name","showStr"],
+    ko_excel: "activity":{"1":["일일 패키지","종료됨"],"1001":["크로스서버 보물암","종료됨"]
+    dbmgr.get(name, id)
+      sg.langMgr.translateExcelLine(name, id, line, noTrans);
+      =>this._excelLangPack.translateLine(name, id, line, noTrans);
+        let head = this._headData[name];  对应excel_head_lang.json
+        for (let i = 0; i < head.length; i++) {
+            let column = head[i];
+            line[column + "_cn"] = line[column];//记下中文
+            line[column] = langData[i];
+    缺点：其他语音也会包含中文内容
+    优点：
+      一包可切任何语言；
+      采用表列替换的方式，而非中文映射，更精准，效率高
+  ```
+
+- 解决：
+1. 表的行数据 不再采用二进制方式(好像也没省什么空间) 直接采用json转utf8str方式
+2. 评估是否需要字符串缓存 因为改为json后 解析后就直接可以用了；如果还需要去重，得根据head_type重新赋值
+3. 语言包：
+   1. 翻译提取：不变 还是得到ko_excel.json文件
+   2. 转为新的db格式，按表名做zip包的文件，内容还是json字符串
+   3. 游戏动态翻译时，只需修改langData的获取方式即可
+
+
+- 测试结果
+```
+原始游戏项目： 6.99M  全部压到zip后762k
+  下载json：219ms
+  解析内容：34ms
+  占内存：>20M
+二进制：  data.db 1.27M
+  read json:86ms
+  read .zip+load bufer 86ms 比异步的慢很多 估计是一次解析了所有文件
+  read one table:3ms  这个变快了 正常：表文件先解析了一部分
+  parse one line:0ms  
+  parse all lines: 1ms
+  内存：等接入游戏后查看
+json方式的二进制： data.zip 1.17M
+  read json:85ms
+  read .zip+load bufer 87ms 比异步的慢很多 估计是一次解析了所有文件
+  read one table:2ms  这个变快了 正常：表文件先解析了一部分
+  parse one line:0ms  
+  parse all lines: 2ms
+  load all tables time 731
+    skill_skill 47
+    monster_monster 40
+  内存：等接入游戏后查看
+```
+- 结论：
+1. 除了下载+加载需要一点时间  动态读取的速度很快 
+2. 可以不用做缓存了 
+3. 大小从3个文件的6.99M到单db文件的1.27M，只有原来的18.1%
 
 
 
+### 遇到的问题
 
+1. 解析ids时json.parse报错 查看发现字符串不完成
+```
+  对比写入时的情况 内容完整 转json后长度为82119
+  读取时长度变成了16583 内容被截断不再完整
+  分析：
+  82119
+  0001 0100 0000 1100 0111
+  16583 
+  0100 0000 1100 0111
+  writeUTFString 使用int16做为长度位 导致数据丢失
+  解决：使用writeUTFString32
 
+  扩展：除了ids 是否还有字符串长度会超过？
+    double_keys ids 
+```
 
 
 

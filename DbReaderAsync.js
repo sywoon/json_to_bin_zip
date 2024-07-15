@@ -47,8 +47,8 @@ class DbReaderAsync {
                     let info = this.getDbById("activity", 1);
                 })
             });
-        } catch (error) {
-            console.error("read zip error", error);
+        } catch (err) {
+            console.error("read zip error", err && err.stack);
         }
 
         // this.saveJson(headInfo, bodyInfos);
@@ -180,7 +180,7 @@ class DbReaderAsync {
             let byte = new Byte(data); // data 是一个 Buffer 对象
             return byte;
         } catch (err) {
-            console.error(`read db file failed:${path}`, err);
+            console.error(`read db file failed:${path}`, err && err.stack);
             return null;
         }
     }
@@ -198,7 +198,7 @@ class DbReaderAsync {
         }
 
         try {
-            fs.mkdirSync("./data2", { recursive: true });
+            fs.mkdirSync("./data2", { recursive: true });645
 
             let pathStrBuffer = `./data2/strings.json`;
             fs.writeFileSync(pathStrBuffer, JSON.stringify(Object.values(this.strBuffer)));
@@ -212,11 +212,11 @@ class DbReaderAsync {
                     let txt = JSON.stringify(bodyInfos[i], replacer);
                     fs.writeFileSync(pathBody, txt);
                 } catch (err) {
-                    console.error("save body file failed", pathBody, err);
+                    console.error("save body file failed", pathBody, err && err.stack);
                 }
             }
         } catch (err) {
-            console.error("save bin file failed", err);
+            console.error("save bin file failed", err && err.stack);
         }
     }
 

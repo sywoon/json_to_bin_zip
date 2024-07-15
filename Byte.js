@@ -518,7 +518,7 @@ var Byte = exports.Byte = /** @class */ (function () {
         } else if (typeof value === 'string') {
             this.writeInt8(1);
             this.writeUTFString(value)
-        } else if (typeof value === 'number') {
+        } else if (typeof value === 'number') {  // int float
             if (Number.isInteger(value)) {
                 this.writeInt8(2);
                 this.writeVarInt(value);

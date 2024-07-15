@@ -112,7 +112,7 @@ class DbWriterAsync {
             // let pathHead = `./data/heads.db`;
             // fs.writeFileSync(pathHead, Buffer.from(headByte.buffer));
         } catch (err) {
-            console.error("save bin file failed", err);
+            console.error("save bin file failed", err && err.stack);
         }
     }
 
@@ -225,7 +225,7 @@ class DbWriterAsync {
             const text = fs.readFileSync(path, "utf8");
             data = JSON.parse(text);
         } catch (err) {
-            console.error(`read failed:${path}`, err);
+            console.error(`read failed:${path}`, err && err.stack);
         }
         return data;
     }

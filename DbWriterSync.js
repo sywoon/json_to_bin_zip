@@ -3,6 +3,9 @@ const fs = require("fs");
 const Byte = require("./Byte").Byte;
 const JSZipSync = require("./libs/jszip_sync");
 
+//保存数据的格式
+const data_type = 2  //1:binary 2:json
+
 class StringBlock {
     constructor() {
         this.strByte = new Byte();
@@ -88,7 +91,7 @@ class DbWriterSync {
             });
             fs.writeFileSync("./data/data.zip", Buffer.from(content))
         } catch (err) {
-            console.error("save bin file failed", err);
+            console.error("save bin file failed", err && err.stack);
         }
     }
 
@@ -106,7 +109,12 @@ class DbWriterSync {
             let body = bodyData.values[i];
             //每个表数据的偏移
             //有多个data文件 按顺序叠加
-            let tableInfo = this.parseOneTable(name, head_title, head_type, double_keys, body);
+            let tableInfo = null;
+            if (data_type == 1) {
+                tableInfo = this.parseOneTableByBin(name, head_title, head_type, double_keys, body);
+            } else if (data_type == 2) {
+                tableInfo = this.parseOneTableByJson(name, head_title, head_type, double_keys, body);
+            }
             let byteTable = this.oneTableBodyToBin(tableInfo);
             tablesInfo.push({ tableInfo: tableInfo, byteTable: byteTable, tableIdx: tableIdx, name: name });
         }
@@ -121,7 +129,44 @@ class DbWriterSync {
     // double_keys: {key:id}
     // string_block: StringBlock
     // data_byte: Byte
-    parseOneTable(name, head_title, head_type, double_keys, body) {
+    parseOneTableByJson(name, head_title, head_type, double_keys, body) {
+        let tableInfo = {};
+        let headInfo = {};
+        headInfo["name"] = name;
+        headInfo["row_count"] = body.length;
+        tableInfo["head_info"] = headInfo;
+
+        let ids = {};
+        tableInfo["ids"] = ids;
+        tableInfo["head_title"] = head_title;
+        tableInfo["head_type"] = head_type;
+        tableInfo["double_keys"] = double_keys == null ? null : double_keys;
+
+        let strBlock = new StringBlock();
+        let dataByte = new Byte();
+        tableInfo["string_block"] = strBlock;
+        tableInfo["data_byte"] = dataByte;
+
+        for (let j = 0; j < body.length; j++) {
+            let id = body[j][0];
+            ids[id] = dataByte.pos;
+            let lineStr = JSON.stringify(body[j]);
+            dataByte.writeUTFString(lineStr);  //先忽略字符串去重缓存
+        }
+        return tableInfo;
+    }
+
+
+    //分析一张表的数据 再转成二进制 为了得到精准的offset
+    //tableInfo
+    // head_info: {row_count, name}
+    // ids: {id:offset}
+    // head_title: [name, ...]
+    // head_type: [0:int 1:string 2:json 3:float 4:any]
+    // double_keys: {key:id}
+    // string_block: StringBlock
+    // data_byte: Byte
+    parseOneTableByBin(name, head_title, head_type, double_keys, body) {
         let tableInfo = {};
         let headInfo = {};
         headInfo["name"] = name;
@@ -178,8 +223,8 @@ class DbWriterSync {
         byteHead.writeUTFString(JSON.stringify(tableInfo["head_info"])); //tableInfo
         byteHead.writeUTFString(JSON.stringify(tableInfo["head_title"]));
         byteHead.writeUTFString(JSON.stringify(tableInfo["head_type"]));
-        byteHead.writeUTFString(tableInfo["double_keys"] ? JSON.stringify(tableInfo["double_keys"]) : "null");
-        byteHead.writeUTFString(JSON.stringify(tableInfo["ids"]));
+        byteHead.writeUTFString32(tableInfo["double_keys"] ? JSON.stringify(tableInfo["double_keys"]) : "null");
+        byteHead.writeUTFString32(JSON.stringify(tableInfo["ids"]));
 
         let byteBody = tableInfo["data_byte"];
         let byteStrBlock = tableInfo["string_block"].strByte;
@@ -201,7 +246,7 @@ class DbWriterSync {
             const text = fs.readFileSync(path, "utf8");
             data = JSON.parse(text);
         } catch (err) {
-            console.error(`read failed:${path}`, err);
+            console.error(`read failed:${path}`, err && err.stack);
         }
         return data;
     }

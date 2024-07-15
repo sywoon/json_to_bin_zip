@@ -3,6 +3,9 @@ const Byte = require("./Byte").Byte;
 const JSZipSync = require("./libs/jszip_sync");
 const { table } = require("console");
 
+// 数据读取方式
+const data_type = 2  //1:binary 2:json
+
 class DbReaderSync {
     constructor() {
         this.strBuffer = {};
@@ -43,19 +46,28 @@ class DbReaderSync {
             }
 
             // let tableInfo = this.unzipOneTable("activity");
-            let info = this.getDbById("activity", 1);
+            let info = this.getDbById("activity", 2);
             console.log("activity info", info);
 
-            let lines = this.readDbAll("activity");
-            console.log("lines all", Object.keys(lines));
+            let lines = this.getDb("activity");
+            console.log("lines all", Object.keys(lines).length);
 
 
             {
                 let line = this.getUnique("beatGame_treasure", 1001, 3)
                 console.log("double_key beatGame_treasure", line)
             }
+
+            {
+                let time = Date.now();
+                for (let name of names) {
+                    let lines = this.getDb(name);
+                    // console.log("lines all", name, Object.keys(lines).length);
+                }
+                console.log("load all tables time", Date.now() - time);
+            }
         } catch (err) {
-            console.error("binToJson error", err);
+            console.error("binToJson error", err && err.stack);
         }
         // this.saveJson(headInfo, bodyInfos);
     }
@@ -111,6 +123,14 @@ class DbReaderSync {
     }
 
     readLineById(name, id) {
+        if (data_type == 1) {
+            return this.readLineByIdBin(name, id);  
+        } else if (data_type == 2) {
+            return this.readLineByIdJson(name, id);
+        }
+    }
+
+    readLineByIdByBin(name, id) {
         // let time = Date.now();
         let tableInfo = this.tableCache[name];
         if (!tableInfo) {
@@ -148,8 +168,39 @@ class DbReaderSync {
         return row;
     }
 
-    readDbAll(name) {
+    readLineByIdJson(name, id) {
+        // let time = Date.now();
+        let tableInfo = this.tableCache[name];
+        if (!tableInfo) {
+            console.error("readLineById error", name, id);
+            return null;
+        }
+
+        let ids = tableInfo["ids"];
+        let offset = ids[id];
+        let dataByte = tableInfo["data_byte"];
+        let strBlock = tableInfo["string_block"];
+
+        dataByte.pos = offset;
+        let row = null;
+        try {
+            let rowArr = JSON.parse(dataByte.readUTFString());
+            let head_title = tableInfo["head_title"]
+            row = {};  //转为map形式 方便业务使用
+            for (let i = 0; i < head_title.length; i++) {
+                row[head_title[i]] = rowArr[i]; 
+            }
+        } catch (err) {
+            console.error("readLineByIdJson error", name, id, err && err.stack);
+            return null;    
+        }
+        // console.log("read line time:", name, Date.now() - time);  //0-1ms
+        return row;
+    }
+
+    getDb(name) {
         let time = Date.now();
+        this.checkTableInfo(name);
         let tableInfo = this.tableCache[name];
         if (!tableInfo) {
             console.error("readDbAll error", name, id);
@@ -158,11 +209,11 @@ class DbReaderSync {
 
         let ids = tableInfo["ids"];
         let lines = {};
-        for (let id in ids) {
+        for (let id of Object.keys(ids)) {
             let row = this.readLineById(name, id);
             lines[id] = row;
         }
-        console.log("read db all time:", name, Date.now() - time);
+        console.log("read db time:", name, Date.now() - time);
         return lines;
     }
 
@@ -180,17 +231,20 @@ class DbReaderSync {
         let headInfo = head.readUTFString();
         let headTitle = head.readUTFString();
         let headType = head.readUTFString();
-        let doubleKeys = head.readUTFString();
-        let ids = head.readUTFString();
-
+        let doubleKeys = head.readUTFString32();
+        let ids = head.readUTFString32();
         let tableInfo = {};
-        tableInfo["head_info"] = JSON.parse(headInfo);
-        tableInfo["head_title"] = JSON.parse(headTitle);
-        tableInfo["head_type"] = JSON.parse(headType);
-        tableInfo["double_keys"] = JSON.parse(doubleKeys); //可能是'null'
-        tableInfo["ids"] = JSON.parse(ids);
-        tableInfo["data_byte"] = body;
-        tableInfo["string_block"] = strBlock;
+        try {
+            tableInfo["head_info"] = JSON.parse(headInfo);
+            tableInfo["head_title"] = JSON.parse(headTitle);
+            tableInfo["head_type"] = JSON.parse(headType);
+            tableInfo["double_keys"] = JSON.parse(doubleKeys); //可能是'null'
+            tableInfo["ids"] = JSON.parse(ids);
+            tableInfo["data_byte"] = body;
+            tableInfo["string_block"] = strBlock;
+        } catch (err) {
+            console.error("parseOneTableDb error", err && err.stack); 
+        }
         return tableInfo;
     }
 
@@ -201,7 +255,7 @@ class DbReaderSync {
             let byte = new Byte(data); // data 是一个 Buffer 对象
             return byte;
         } catch (err) {
-            console.error(`read db file failed:${path}`, err);
+            console.error(`read db file failed:${path}`, err && err.stack);
             return null;
         }
     }
