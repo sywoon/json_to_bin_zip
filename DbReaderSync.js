@@ -5,21 +5,21 @@ const { table } = require("console");
 
 // 数据读取方式
 const data_type = 2  //1:binary 2:json
+const use_str_cache = false;
 
 class DbReaderSync {
     constructor() {
-        this.strBuffer = {};
         this.zipFile = null;
         this.tableCache = {};
     }
 
     getBufferString(offset, strByte) {
-        if (this.strBuffer[offset] != null) { //可以优化 只在读取某个表过程中才保存
-            return this.strBuffer[offset];
-        }
+        //现在每个表的strBuffer都独立了 所以不能混用
+        // if (this.strBuffer[offset] != null) { //可以优化 只在读取某个表过程中才保存
+        //     return this.strBuffer[offset];
+        // }
         strByte.pos = offset;
         let str = strByte.readUTFString();
-        this.strBuffer[offset] = str;
         return str;
     }
 
@@ -186,7 +186,22 @@ class DbReaderSync {
         try {
             let rowArr = JSON.parse(dataByte.readUTFString());
             let head_title = tableInfo["head_title"]
+            let head_type = tableInfo["head_type"]
             row = {};  //转为map形式 方便业务使用
+
+            if (use_str_cache) {
+                for (let i = 0; i < head_title.length; i++) {
+                    //0:int 1:string 2:json 3:float 4:any
+                    let type = head_type[i];
+                    if (type == 1) {
+                        rowArr[i] = this.getBufferString(rowArr[i], strBlock); 
+                    } else if (type == 2) {
+                        let txt = this.getBufferString(rowArr[i], strBlock); 
+                        rowArr[i] = JSON.parse(txt);
+                    } 
+                }
+            }
+            //转map形式
             for (let i = 0; i < head_title.length; i++) {
                 row[head_title[i]] = rowArr[i]; 
             }

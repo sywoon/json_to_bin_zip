@@ -5,6 +5,7 @@ const JSZipSync = require("./libs/jszip_sync");
 
 //保存数据的格式
 const data_type = 2  //1:binary 2:json
+const use_str_cache = false;
 
 class StringBlock {
     constructor() {
@@ -147,11 +148,36 @@ class DbWriterSync {
         tableInfo["string_block"] = strBlock;
         tableInfo["data_byte"] = dataByte;
 
-        for (let j = 0; j < body.length; j++) {
-            let id = body[j][0];
-            ids[id] = dataByte.pos;
-            let lineStr = JSON.stringify(body[j]);
-            dataByte.writeUTFString(lineStr);  //先忽略字符串去重缓存
+        if (!use_str_cache) {
+            for (let j = 0; j < body.length; j++) {
+                let line = body[j];
+                let id = line[0];
+                ids[id] = dataByte.pos;
+                let lineStr = JSON.stringify(line);
+                dataByte.writeUTFString(lineStr);  //先忽略字符串去重缓存
+            }
+        } else {
+            for (let j = 0; j < body.length; j++) {
+                let line = body[j];
+                let id = line[0];
+                ids[id] = dataByte.pos;
+                for (let k = 0; k < line.length; k++) {
+                    //column
+                    //0:int 1:string 2:json 3:float 4:any
+                    //若为string或json 存入string block-去重
+                    let v = line[k];
+                    if (head_type[k] == 1) {
+                        let off = strBlock.pushString(v, name);
+                        line[k] = off;
+                    } else if (head_type[k] == 2) {
+                        let txt = JSON.stringify(v);
+                        let off = strBlock.pushString(txt, name);
+                        line[k] = off;
+                    }
+                }
+                let lineStr = JSON.stringify(line);
+                dataByte.writeUTFString(lineStr);  
+            }
         }
         return tableInfo;
     }
