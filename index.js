@@ -268,7 +268,7 @@ function main() {
 
     if (true) {
         const dbWriter = new DbWriterSync();
-        dbWriter.jsonToBin()
+        dbWriter.jsonTogin()
         const dbReader = new DbReaderSync();
         dbReader.binToJson();
 
